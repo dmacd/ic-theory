@@ -1,0 +1,9 @@
+/.lake/
+/build/
+/docbuild/.lake/
+/docbuild/build/
+/blueprint/.lake/
+/blueprint/build/
+*.ilean
+*.olean
+.DS_Store
