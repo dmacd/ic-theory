@@ -1,13 +1,16 @@
 # IcTheory
 
-## GitHub configuration
+Lean 4 + Mathlib formalization workspace for *A theory of incremental compression*.
 
-To set up your new GitHub repository, follow these steps:
+## Current foundation layer
 
-* Under your repository name, click **Settings**.
-* In the **Actions** section of the sidebar, click "General".
-* Check the box **Allow GitHub Actions to create and approve pull requests**.
-* Click the **Pages** section of the settings sidebar.
-* In the **Source** dropdown menu, select "GitHub Actions".
+- `IcTheory.Basics.BitString`: finite binary strings as `List Bool`
+- `IcTheory.Basics.PrefixEncoding`: paper-style `E1` and `E2` encodings
+- `IcTheory.Basics.Pairing`: prefix-based pairing and triple encoding
+- `IcTheory.Basics.LogBounds`: explicit logarithmic-slack relations for later AIT theorems
 
-After following the steps above, you can remove this section from the README file.
+## Planning docs
+
+- `PLAN.md`
+- `docs/model-decisions.md`
+- `docs/theorem-map.md`
