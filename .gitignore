@@ -7,3 +7,4 @@
 *.ilean
 *.olean
 .DS_Store
+/.lake
