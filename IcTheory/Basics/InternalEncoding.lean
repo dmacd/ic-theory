@@ -1,4 +1,5 @@
 import IcTheory.Basics.Pairing
+import Mathlib.Data.List.TakeDrop
 
 namespace IcTheory
 
@@ -79,6 +80,22 @@ def splitAt : Nat → BitString → BitString × BitString
 @[simp] theorem countLeadingTrue_true (xs : BitString) :
     countLeadingTrue (true :: xs) = countLeadingTrue xs + 1 := rfl
 
+theorem countLeadingTrue_primrec : Primrec countLeadingTrue := by
+  have hstep : Primrec₂ fun (_ : List Bool) (p : Bool × Nat) => cond p.1 (p.2 + 1) 0 := by
+    refine Primrec.cond (hc := ?_) (hf := ?_) (hg := ?_)
+    · exact Primrec.fst.comp Primrec.snd
+    · exact Primrec.nat_add.comp (Primrec.snd.comp Primrec.snd) (Primrec.const 1)
+    · exact Primrec.const 0
+  refine (Primrec.list_foldr (hf := Primrec.id) (hg := Primrec.const 0) hstep).of_eq ?_
+  intro xs
+  induction xs with
+  | nil => rfl
+  | cons b xs ih =>
+      cases b <;> simpa [countLeadingTrue] using ih
+
+theorem countLeadingTrue_computable : Computable countLeadingTrue :=
+  countLeadingTrue_primrec.to_comp
+
 @[simp] theorem splitAt_zero (xs : BitString) : splitAt 0 xs = ([], xs) := rfl
 
 @[simp] theorem splitAt_nil (n : Nat) : splitAt (n + 1) ([] : BitString) = ([], []) := rfl
@@ -92,6 +109,76 @@ theorem splitAt_eq_take_drop : ∀ n : Nat, ∀ xs : BitString,
   | n + 1, [] => by simp [splitAt]
   | n + 1, x :: xs => by
       simp [splitAt, splitAt_eq_take_drop n xs]
+
+private def splitAdvance (state : BitString × BitString) : BitString × BitString :=
+  match state.2 with
+  | [] => (state.1, [])
+  | b :: suff => (state.1.concat b, suff)
+
+private theorem splitAdvance_primrec : Primrec splitAdvance := by
+  let A := BitString × BitString
+  have hnil : Primrec (fun a : A => (a.1, ([] : BitString))) := by
+    exact (Primrec.pair Primrec.fst (Primrec.const ([] : BitString))).of_eq fun _ => rfl
+  have hbool : Primrec fun p : A × (Bool × BitString) => (p.2.1 : Bool) := by
+    exact Primrec.fst.comp Primrec.snd
+  have hh1' : Primrec fun p : A × (Bool × BitString) => p.1.1 ++ [p.2.1] := by
+    exact Primrec.list_concat.comp (Primrec.fst.comp Primrec.fst) hbool
+  have hh1 : Primrec fun p : A × (Bool × BitString) => p.1.1.concat (p.2.1 : Bool) := by
+    exact hh1'.of_eq fun p => by simp
+  have hh2 : Primrec fun p : A × (Bool × BitString) => (p.2.2 : BitString) := by
+    exact Primrec.snd.comp Primrec.snd
+  have hcons : Primrec₂ fun (a : A) (q : Bool × BitString) => (a.1.concat q.1, q.2) := by
+    exact ((Primrec.pair hh1 hh2).to₂).of_eq fun a q => rfl
+  refine (Primrec.list_casesOn (f := fun a : A => a.2) Primrec.snd hnil hcons).of_eq ?_
+  rintro ⟨pref, suff⟩
+  cases suff <;> simp [splitAdvance]
+
+private theorem splitAt_step (xs : BitString) (n : Nat) :
+    splitAdvance (splitAt n xs) = splitAt (n + 1) xs := by
+  rw [splitAt_eq_take_drop, splitAt_eq_take_drop]
+  cases hdrop : xs.drop n with
+  | nil =>
+      have hzero : 0 = xs.length - n := by
+        simpa [hdrop] using (List.length_drop (i := n) (l := xs))
+      have hlen : xs.length ≤ n := by omega
+      simp [splitAdvance, List.take_of_length_le hlen,
+        List.take_of_length_le (Nat.le_trans hlen (Nat.le_succ _)),
+        List.drop_eq_nil_of_le (Nat.le_trans hlen (Nat.le_succ _))]
+  | cons b suff =>
+      have hlt : n < xs.length := by
+        apply lt_of_not_ge
+        intro hge
+        rw [List.drop_eq_nil_of_le hge] at hdrop
+        simp at hdrop
+      have hdrop' : xs.drop n = xs[n] :: xs.drop (n + 1) := List.drop_eq_getElem_cons hlt
+      have hcons : xs[n] :: xs.drop (n + 1) = b :: suff := by
+        simpa [hdrop] using hdrop'
+      have hb : xs[n] = b := by
+        injection hcons with hb hs
+      have hsuff : xs.drop (n + 1) = suff := by
+        injection hcons with hb hs
+      simp [splitAdvance, hsuff, List.concat_eq_append]
+      simpa [hb] using (List.take_concat_get' xs n hlt)
+
+theorem splitAt_primrec : Primrec₂ splitAt := by
+  have hinit : Primrec (fun p : Nat × BitString => (([] : BitString), p.2)) := by
+    exact (Primrec.pair (Primrec.const ([] : BitString)) Primrec.snd).of_eq fun _ => rfl
+  have hiter : Primrec₂ fun n xs => (splitAdvance^[n]) (([] : BitString), xs) := by
+    simpa using
+      ((Primrec.nat_iterate (f := fun p : Nat × BitString => p.1)
+        (g := fun p : Nat × BitString => (([] : BitString), p.2))
+        (h := fun (_ : Nat × BitString) s => splitAdvance s)
+        Primrec.fst hinit ((splitAdvance_primrec.comp Primrec.snd).to₂)).to₂)
+  have hEq : ∀ n xs, (splitAdvance^[n]) (([] : BitString), xs) = splitAt n xs := by
+    intro n xs
+    induction n with
+    | zero => simp [splitAt]
+    | succ n ih =>
+        simpa [Function.iterate_succ_apply', ih] using splitAt_step xs n
+  exact hiter.of_eq hEq
+
+theorem splitAt_computable : Computable₂ splitAt :=
+  splitAt_primrec.to_comp
 
 @[simp] theorem countLeadingTrue_unary (n : Nat) :
     countLeadingTrue (unary n) = n := by
@@ -125,6 +212,52 @@ def decodeExactQuadPayload (payload : BitString) : BitString × BitString × Bit
   let ab := decodeExactPairPayload ab_cd.1
   let cd := decodeExactPairPayload ab_cd.2
   (ab.1, ab.2, cd.1, cd.2)
+
+theorem decodeExactPairPayload_primrec : Primrec decodeExactPairPayload := by
+  have hSplitHeader :
+      Primrec fun payload => splitAt (countLeadingTrue payload + 1) payload := by
+    exact splitAt_primrec.comp
+      (Primrec.nat_add.comp countLeadingTrue_primrec (Primrec.const 1))
+      Primrec.id
+  have hRest₁ :
+      Primrec fun payload => (splitAt (countLeadingTrue payload + 1) payload).2 := by
+    exact Primrec.snd.comp hSplitHeader
+  have hSplitLen :
+      Primrec fun payload => splitAt (countLeadingTrue payload) ((splitAt (countLeadingTrue payload + 1) payload).2) := by
+    exact splitAt_primrec.comp countLeadingTrue_primrec hRest₁
+  have hLenCode :
+      Primrec fun payload => (splitAt (countLeadingTrue payload) ((splitAt (countLeadingTrue payload + 1) payload).2)).1 := by
+    exact Primrec.fst.comp hSplitLen
+  have hRest₂ :
+      Primrec fun payload => (splitAt (countLeadingTrue payload) ((splitAt (countLeadingTrue payload + 1) payload).2)).2 := by
+    exact Primrec.snd.comp hSplitLen
+  exact (splitAt_primrec.comp (BitString.toNatExact_primrec.comp hLenCode) hRest₂).of_eq
+    fun payload => by rfl
+
+theorem decodeExactPairPayload_computable : Computable decodeExactPairPayload :=
+  decodeExactPairPayload_primrec.to_comp
+
+theorem decodeExactQuadPayload_primrec : Primrec decodeExactQuadPayload := by
+  refine (Primrec.pair
+      (Primrec.fst.comp
+        (decodeExactPairPayload_primrec.comp
+          (Primrec.fst.comp (decodeExactPairPayload_primrec.comp Primrec.id))))
+      (Primrec.pair
+        (Primrec.snd.comp
+          (decodeExactPairPayload_primrec.comp
+            (Primrec.fst.comp (decodeExactPairPayload_primrec.comp Primrec.id))))
+        (Primrec.pair
+          (Primrec.fst.comp
+            (decodeExactPairPayload_primrec.comp
+              (Primrec.snd.comp (decodeExactPairPayload_primrec.comp Primrec.id))))
+          (Primrec.snd.comp
+            (decodeExactPairPayload_primrec.comp
+              (Primrec.snd.comp (decodeExactPairPayload_primrec.comp Primrec.id))))))).of_eq ?_
+  intro payload
+  rfl
+
+theorem decodeExactQuadPayload_computable : Computable decodeExactQuadPayload :=
+  decodeExactQuadPayload_primrec.to_comp
 
 @[simp] theorem decodeExactPairPayload_exactPairPayload (x y : BitString) :
     decodeExactPairPayload (exactPairPayload x y) = (x, y) := by

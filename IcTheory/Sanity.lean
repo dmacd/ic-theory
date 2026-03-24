@@ -96,6 +96,18 @@ example : PrefixRuns (pair emptyInterpreter (e2 (codeToProgram (Nat.Partrec.Code
   exact (runs_const_iff 5 [] (ofNatExact 5)).2 rfl
 
 example :
+    runs jointUpperInterpreter
+      (packedInput []
+        (JointUpperPayload []
+          (codeToProgram (Nat.Partrec.Code.const 5))
+          []
+          (codeToProgram (Nat.Partrec.Code.const 7))))
+      (packedInput (ofNatExact 5) (ofNatExact 7)) := by
+  apply jointUpperInterpreter_isJointUpperInterpreter
+  · exact (runs_const_iff 5 (packedInput [] []) (ofNatExact 5)).2 rfl
+  · exact (runs_const_iff 7 (packedInput (ofNatExact 5) []) (ofNatExact 7)).2 rfl
+
+example :
     PrefixConditionalComplexity (ofNatExact 5) (codeToProgram (Nat.Partrec.Code.const 5)) ≤
       residualPrefixOverhead [] := by
   simpa using

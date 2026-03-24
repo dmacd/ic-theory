@@ -44,6 +44,12 @@ theorem jointUpperAtFeatureScale_of_interpreter {u f x : Program}
     JointUpperChainRuleAt (BitString.blen x) f x := by
   exact jointUpperChainRuleAt_of_interpreter_of_scale_le hu hscale
 
+/-- The Section 3.3 upper-chain hypothesis from the concrete fixed interpreter. -/
+theorem jointUpperAtFeatureScale {f x : Program}
+    (hscale : PrefixComplexity f + PrefixConditionalComplexity x f ≤ BitString.blen x) :
+    JointUpperChainRuleAt (BitString.blen x) f x := by
+  exact jointUpperAtFeatureScale_of_interpreter jointUpperInterpreter_isJointUpperInterpreter hscale
+
 /-- Lemma 3.3 reduced to a symmetry-of-information hypothesis over the prefix layer. -/
 theorem lemma33_of_symmetry {f x : Program}
     (hfeature : IsFeature runs f x)

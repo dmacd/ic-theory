@@ -1,4 +1,5 @@
 import Mathlib.Computability.Encoding
+import Mathlib.Computability.Partrec
 import Mathlib.Data.Nat.Bits
 import Mathlib.Data.Nat.Size
 
@@ -153,6 +154,76 @@ theorem blen_ofNatExact_le_ofNat (n : Nat) : blen (ofNatExact n) ≤ blen (ofNat
 theorem toNatExact_injective : Function.Injective toNatExact := by
   intro x y h
   simpa [ofNatExact_toNatExact x, ofNatExact_toNatExact y] using congrArg ofNatExact h
+
+theorem toNatExact_primrec : Primrec toNatExact := by
+  have hstep : Primrec₂ fun (_ : List Bool) (p : Bool × Nat) =>
+      cond p.1 (2 * p.2 + 2) (2 * p.2 + 1) := by
+    refine Primrec.cond (hc := ?_) (hf := ?_) (hg := ?_)
+    · exact Primrec.fst.comp Primrec.snd
+    · exact Primrec.nat_add.comp
+        (Primrec.nat_mul.comp (Primrec.const 2) (Primrec.snd.comp Primrec.snd))
+        (Primrec.const 2)
+    · exact Primrec.nat_add.comp
+        (Primrec.nat_mul.comp (Primrec.const 2) (Primrec.snd.comp Primrec.snd))
+        (Primrec.const 1)
+  refine (Primrec.list_foldr (hf := Primrec.id) (hg := Primrec.const 0) hstep).of_eq ?_
+  intro xs
+  induction xs with
+  | nil => rfl
+  | cons b xs ih =>
+      cases b <;> simpa [toNatExact] using ih
+
+theorem toNatExact_computable : Computable toNatExact :=
+  toNatExact_primrec.to_comp
+
+theorem ofNatExact_primrec : Primrec ofNatExact := by
+  have hmatch : Primrec₂ fun (_ : Unit) (prevs : List BitString) =>
+      match prevs with
+      | [] => some []
+      | _ :: tail => Option.map (List.cons (Nat.bodd tail.length)) (prevs[tail.length.div2]?) := by
+    have hnil : Primrec (fun (_ : Unit × List BitString) => some ([] : BitString)) :=
+      Primrec.const _
+    have hstep : Primrec₂ fun (a : Unit × List BitString) (q : BitString × List BitString) =>
+        Option.map (List.cons (Nat.bodd q.2.length)) (a.2[q.2.length.div2]?) := by
+      exact Primrec.option_map
+        (hf := Primrec.list_getElem?.comp
+          (Primrec.snd.comp Primrec.fst)
+          (Primrec.nat_div2.comp (Primrec.list_length.comp (Primrec.snd.comp Primrec.snd))))
+        (hg := (Primrec.list_cons.comp
+          (Primrec.nat_bodd.comp
+            (Primrec.list_length.comp (Primrec.snd.comp (Primrec.snd.comp Primrec.fst))))
+          Primrec.snd).to₂)
+    refine ((Primrec.list_casesOn
+      (f := fun p : Unit × List BitString => p.2) Primrec.snd hnil hstep).to₂).of_eq ?_
+    intro u prevs
+    cases prevs <;> rfl
+  have hg : Primrec₂ fun (_ : Unit) (prevs : List BitString) =>
+      match prevs.length with
+      | 0 => some []
+      | n + 1 => Option.map (List.cons (Nat.bodd n)) (prevs[n.div2]?) := by
+    refine hmatch.of_eq ?_
+    intro u prevs
+    cases prevs <;> rfl
+  have h : Primrec₂ (fun (_ : Unit) n => ofNatExact n) := by
+    refine Primrec.nat_strong_rec (f := fun (_ : Unit) n => ofNatExact n) hg ?_
+    intro _ n
+    cases n with
+    | zero => simp [ofNatExact]
+    | succ n =>
+        have hlt : n.div2 < n + 1 := by
+          exact lt_of_le_of_lt
+            (by simpa [Nat.div2_val] using Nat.div_le_self n 2)
+            (Nat.lt_succ_self _)
+        have hget :
+            ((List.range (n + 1)).map ofNatExact)[n.div2]? = some (ofNatExact (n.div2)) := by
+          rw [List.getElem?_map, List.getElem?_range hlt]
+          simp
+        simpa [ofNatExact, List.length_range] using
+          congrArg (Option.map (List.cons (Nat.bodd n))) hget
+  simpa using h.comp (Primrec.const Unit.unit) Primrec.id
+
+theorem ofNatExact_computable : Computable ofNatExact :=
+  ofNatExact_primrec.to_comp
 
 end BitString
 

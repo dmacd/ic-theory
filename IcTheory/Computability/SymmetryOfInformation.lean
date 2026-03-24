@@ -4,6 +4,8 @@ namespace IcTheory
 
 namespace UniversalMachine
 
+open Nat.Partrec
+
 noncomputable section
 
 /-- Payload format for the missing joint upper-chain interpreter.
@@ -23,6 +25,125 @@ def IsJointUpperInterpreter (u : Program) : Prop :=
     runs f (packedInput [] s) x →
       runs g (packedInput x r) y →
         runs u (packedInput [] (JointUpperPayload s f r g)) (packedInput x y)
+
+private def jointUpperDecoded (n : Nat) : Program × Program × Program × Program :=
+  BitString.decodeExactQuadPayload (BitString.ofNatExact n.unpair.2)
+
+private theorem jointUpperDecoded_computable : Computable jointUpperDecoded := by
+  exact BitString.decodeExactQuadPayload_computable.comp
+    (BitString.ofNatExact_computable.comp (Computable.snd.comp Computable.unpair))
+
+private def jointUpperResidualNat (n : Nat) : Nat :=
+  BitString.toNatExact (jointUpperDecoded n).1
+
+private def jointUpperFirstCodeNat (n : Nat) : Nat :=
+  BitString.toNatExact (jointUpperDecoded n).2.1
+
+private def jointUpperSecondResidualNat (n : Nat) : Nat :=
+  BitString.toNatExact (jointUpperDecoded n).2.2.1
+
+private def jointUpperSecondCodeNat (n : Nat) : Nat :=
+  BitString.toNatExact (jointUpperDecoded n).2.2.2
+
+private theorem jointUpperResidualNat_computable : Computable jointUpperResidualNat := by
+  exact BitString.toNatExact_computable.comp (Computable.fst.comp jointUpperDecoded_computable)
+
+private theorem jointUpperFirstCodeNat_computable : Computable jointUpperFirstCodeNat := by
+  exact BitString.toNatExact_computable.comp
+    (Computable.fst.comp (Computable.snd.comp jointUpperDecoded_computable))
+
+private theorem jointUpperSecondResidualNat_computable :
+    Computable jointUpperSecondResidualNat := by
+  exact BitString.toNatExact_computable.comp
+    (Computable.fst.comp
+      (Computable.snd.comp (Computable.snd.comp jointUpperDecoded_computable)))
+
+private theorem jointUpperSecondCodeNat_computable : Computable jointUpperSecondCodeNat := by
+  exact BitString.toNatExact_computable.comp
+    (Computable.snd.comp
+      (Computable.snd.comp (Computable.snd.comp jointUpperDecoded_computable)))
+
+private theorem evalJointUpper_partrec :
+    Nat.Partrec fun n =>
+      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+          (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
+        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+            (Nat.pair xNat (jointUpperSecondResidualNat n)) >>= fun yNat =>
+          Part.some (Nat.pair xNat yNat) := by
+  have hFirstCode : Computable fun n => Denumerable.ofNat Code (jointUpperFirstCodeNat n) := by
+    exact (Computable.ofNat Code).comp jointUpperFirstCodeNat_computable
+  have hFirstInput : Computable fun n => Nat.pair 0 (jointUpperResidualNat n) := by
+    exact (Primrec₂.natPair.to_comp).comp (Computable.const 0) jointUpperResidualNat_computable
+  have hEval₁ : _root_.Partrec fun n =>
+      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+        (Nat.pair 0 (jointUpperResidualNat n)) := by
+    exact Code.eval_part.comp hFirstCode hFirstInput
+  have hSecondCode : Computable fun p : Nat × Nat =>
+      Denumerable.ofNat Code (jointUpperSecondCodeNat p.1) := by
+    exact (Computable.ofNat Code).comp (jointUpperSecondCodeNat_computable.comp Computable.fst)
+  have hSecondInput : Computable fun p : Nat × Nat =>
+      Nat.pair p.2 (jointUpperSecondResidualNat p.1) := by
+    exact (Primrec₂.natPair.to_comp).comp Computable.snd
+      (jointUpperSecondResidualNat_computable.comp Computable.fst)
+  have hEval₂ : _root_.Partrec fun p : Nat × Nat =>
+      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat p.1))
+        (Nat.pair p.2 (jointUpperSecondResidualNat p.1)) := by
+    exact Code.eval_part.comp hSecondCode hSecondInput
+  have hPack : _root_.Partrec₂ fun n xNat =>
+      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+          (Nat.pair xNat (jointUpperSecondResidualNat n)) >>= fun yNat =>
+        Part.some (Nat.pair xNat yNat) := by
+    have hOut : Computable₂ fun (p : Nat × Nat) (yNat : Nat) => Nat.pair p.2 yNat := by
+      exact (Primrec₂.natPair.to_comp).comp (Computable.snd.comp Computable.fst) Computable.snd
+    simpa using (hEval₂.bind hOut.partrec₂).to₂
+  exact _root_.Partrec.nat_iff.1 (hEval₁.bind hPack)
+
+theorem exists_jointUpperInterpreterCode :
+    ∃ c : Code, ∀ n : Nat,
+      Code.eval c n =
+        Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+            (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
+          Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+              (Nat.pair xNat (jointUpperSecondResidualNat n)) >>= fun yNat =>
+            Part.some (Nat.pair xNat yNat) := by
+  obtain ⟨c, hc⟩ := Code.exists_code.1 evalJointUpper_partrec
+  exact ⟨c, fun n => by simpa using congrFun hc n⟩
+
+/-- A fixed program that decodes `JointUpperPayload`, executes the two stored descriptions in
+sequence, and returns the packed output. -/
+noncomputable def jointUpperInterpreterCode : Code :=
+  Classical.choose exists_jointUpperInterpreterCode
+
+theorem eval_jointUpperInterpreterCode (n : Nat) :
+    Code.eval jointUpperInterpreterCode n =
+      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+          (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
+        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+            (Nat.pair xNat (jointUpperSecondResidualNat n)) >>= fun yNat =>
+          Part.some (Nat.pair xNat yNat) :=
+  Classical.choose_spec exists_jointUpperInterpreterCode n
+
+/-- Concrete interpreter witnessing the joint upper-chain rule. -/
+noncomputable def jointUpperInterpreter : Program :=
+  codeToProgram jointUpperInterpreterCode
+
+theorem jointUpperInterpreter_isJointUpperInterpreter :
+    IsJointUpperInterpreter jointUpperInterpreter := by
+  intro f s g r x y hf hg
+  have hf' :
+      Code.eval (Denumerable.ofNat Code (BitString.toNatExact f))
+          (Nat.pair 0 (BitString.toNatExact s)) =
+        Part.some (BitString.toNatExact x) := by
+    simpa [runs, programToCode, toNatExact_packedInput] using hf
+  have hg' :
+      Code.eval (Denumerable.ofNat Code (BitString.toNatExact g))
+          (Nat.pair (BitString.toNatExact x) (BitString.toNatExact r)) =
+        Part.some (BitString.toNatExact y) := by
+    simpa [runs, programToCode, toNatExact_packedInput] using hg
+  rw [jointUpperInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
+  simp [eval_jointUpperInterpreterCode, jointUpperFirstCodeNat, jointUpperResidualNat,
+    jointUpperSecondCodeNat, jointUpperSecondResidualNat, jointUpperDecoded, JointUpperPayload,
+    toNatExact_packedInput, hf', hg']
 
 /-- Upper chain-rule component for joint prefix complexity at scale `n`. -/
 def JointUpperChainRuleAt (n : Nat) (x y : Program) : Prop :=
