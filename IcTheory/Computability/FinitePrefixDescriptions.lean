@@ -164,6 +164,41 @@ theorem mem_prefixOutputsUpToLength_of_jointComplexity_le {x y : Program} {n : N
   simpa [JointComplexity] using
     (mem_prefixOutputsUpToLength_of_prefixComplexity_le (x := packedInput x y) hxy)
 
+/-- Decode a packed pair back into its two exact bitstring components. -/
+def unpackInput (z : Program) : Program × Program :=
+  let n := BitString.toNatExact z
+  (BitString.ofNatExact n.unpair.1, BitString.ofNatExact n.unpair.2)
+
+@[simp] theorem unpackInput_packedInput (x y : Program) :
+    unpackInput (packedInput x y) = (x, y) := by
+  simp [unpackInput, toNatExact_packedInput]
+
+/-- For fixed left component `x`, this is the finite family of right components appearing in
+joint descriptions of complexity at most `n`. -/
+noncomputable def jointRightOutputsUpToLength (x : Program) (n : Nat) : List Program :=
+  (prefixOutputsUpToLength [] n).filterMap fun z =>
+    let w := unpackInput z
+    if w.1 = x then some w.2 else none
+
+theorem mem_jointRightOutputsUpToLength_of_jointComplexity_le {x y : Program} {n : Nat}
+    (hxy : JointComplexity x y ≤ n) :
+    y ∈ jointRightOutputsUpToLength x n := by
+  unfold jointRightOutputsUpToLength
+  rw [List.mem_filterMap]
+  refine ⟨packedInput x y, mem_prefixOutputsUpToLength_of_jointComplexity_le hxy, ?_⟩
+  simp
+
+theorem length_jointRightOutputsUpToLength_le (x : Program) (n : Nat) :
+    (jointRightOutputsUpToLength x n).length ≤ 2 ^ (n + 1) - 1 := by
+  unfold jointRightOutputsUpToLength
+  exact le_trans
+    (length_filterMap_le
+      (fun z =>
+        let w := unpackInput z
+        if w.1 = x then some w.2 else none)
+      (prefixOutputsUpToLength [] n))
+    (length_prefixOutputsUpToLength_le [] n)
+
 end UniversalMachine
 
 end IcTheory
