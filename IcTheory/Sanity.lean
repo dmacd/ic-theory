@@ -1,4 +1,5 @@
 import IcTheory.Computability
+import IcTheory.Compression.Section32
 
 namespace IcTheory
 
@@ -15,6 +16,11 @@ example : e1 [true, false] = [true, true, false, true, false] := rfl
 example : e2 [true, false] = [true, true, false, false, true, true, false] := rfl
 
 example : pair [true] [false, true] = [true, false, true] ++ [false, true] := rfl
+
+example :
+    decodeExactPairPayload (exactPairPayload [true, false] [false, true]) =
+      ([true, false], [false, true]) := by
+  simp
 
 example : CompressionCondition [true] [false] [true, false, true] := by
   decide
@@ -78,6 +84,35 @@ example : UniversalMachine.ConditionalComplexity [true, false, true] [] ≤
 example : runs universalFeature (codeToProgram (Nat.Partrec.Code.const 5)) (ofNatExact 5) := by
   rw [runs_universalFeature_iff]
   exact (runs_const_iff 5 [] (ofNatExact 5)).2 rfl
+
+example : PrefixRuns (pair applyInterpreter (e2 []))
+    (codeToProgram (Nat.Partrec.Code.const 5)) (ofNatExact 5) := by
+  apply prefixRuns_applyInterpreter_of_runs
+  exact (runs_const_iff 5 [] (ofNatExact 5)).2 rfl
+
+example : PrefixRuns (pair emptyInterpreter (e2 (codeToProgram (Nat.Partrec.Code.const 5))))
+    [] (ofNatExact 5) := by
+  apply prefixRuns_emptyInterpreter_of_runs
+  exact (runs_const_iff 5 [] (ofNatExact 5)).2 rfl
+
+example :
+    PrefixConditionalComplexity (ofNatExact 5) (codeToProgram (Nat.Partrec.Code.const 5)) ≤
+      residualPrefixOverhead [] := by
+  simpa using
+    (Compression.lemma32_exact_upper
+      (f := codeToProgram (Nat.Partrec.Code.const 5))
+      (r := [])
+      (x := ofNatExact 5)
+      ((runs_const_iff 5 [] (ofNatExact 5)).2 rfl))
+
+example : LogLe (PrefixComplexity (ofNatExact 5)) (blen (ofNatExact 5)) (blen (ofNatExact 5)) := by
+  exact prefixComplexity_log_upper (ofNatExact 5)
+
+example :
+    LogLe (PrefixComplexity (ofNatExact 5))
+      (Complexity (ofNatExact 5))
+      (Complexity (ofNatExact 5)) := by
+  exact prefixComplexity_logLe_complexity (ofNatExact 5)
 
 end Sanity
 

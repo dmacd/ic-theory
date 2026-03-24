@@ -68,6 +68,19 @@ theorem shortestDescriptiveMap_isDescriptiveMap {runs : Runs} {f g x : Program} 
     IsShortestDescriptiveMap runs f g x → IsDescriptiveMap runs f g x := by
   exact fun h => h.1
 
+theorem descriptiveMap_feature_length_lt {runs : Runs} {f g x : Program}
+    (hdesc : IsDescriptiveMap runs f g x) :
+    BitString.blen f < BitString.blen x := by
+  rcases hdesc with ⟨r, _, _, hcomp⟩
+  unfold CompressionCondition at hcomp
+  exact lt_of_le_of_lt (Nat.le_add_right _ _) hcomp
+
+theorem feature_length_lt {runs : Runs} {f x : Program}
+    (hfeature : IsFeature runs f x) :
+    BitString.blen f < BitString.blen x := by
+  rcases hfeature with ⟨g, hg⟩
+  exact descriptiveMap_feature_length_lt hg
+
 end Compression
 
 end IcTheory

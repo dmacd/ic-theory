@@ -1,2 +1,5 @@
 import IcTheory.Computability.UniversalMachine
 import IcTheory.Computability.Complexity
+import IcTheory.Computability.PrefixComplexity
+import IcTheory.Computability.PrefixInformation
+import IcTheory.Computability.SymmetryOfInformation

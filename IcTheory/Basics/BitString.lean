@@ -47,6 +47,28 @@ decreasing_by
 
 @[simp] theorem blen_ofNat (n : Nat) : blen (ofNat n) = (Computability.encodeNat n).length := rfl
 
+private theorem blen_encodePosNum_eq_natSize :
+    ∀ p : PosNum, (Computability.encodePosNum p).length = PosNum.natSize p
+  | 1 => rfl
+  | PosNum.bit0 p => by
+      simp [Computability.encodePosNum, blen_encodePosNum_eq_natSize p, PosNum.natSize]
+  | PosNum.bit1 p => by
+      simp [Computability.encodePosNum, blen_encodePosNum_eq_natSize p, PosNum.natSize]
+
+private theorem blen_encodeNum_eq_natSize :
+    ∀ n : Num, (Computability.encodeNum n).length = Num.natSize n
+  | 0 => rfl
+  | Num.pos p => blen_encodePosNum_eq_natSize p
+
+@[simp] theorem blen_ofNat_eq_size (n : Nat) : blen (ofNat n) = Nat.size n := by
+  simpa [blen, ofNat, Computability.encodeNat] using
+    (blen_encodeNum_eq_natSize (n : Num)).trans (Num.natSize_to_nat (n : Num))
+
+theorem blen_ofNat_mono {m n : Nat} (h : m ≤ n) :
+    blen (ofNat m) ≤ blen (ofNat n) := by
+  rw [blen_ofNat_eq_size, blen_ofNat_eq_size]
+  exact Nat.size_le_size h
+
 @[simp] theorem toNatExact_ofNatExact (n : Nat) : toNatExact (ofNatExact n) = n := by
   refine Nat.strong_induction_on n ?_
   intro n ih
