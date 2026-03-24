@@ -48,6 +48,32 @@ theorem shortestFeature_le_complexity {f x : Program}
   obtain ⟨g, hgFeature, hgLen⟩ := exists_feature_of_compressible x hcompress
   exact hgLen ▸ hshort.2 g hgFeature
 
+theorem universalFeature_isFeature_of_compressibleByMoreThan (x : Program)
+    (hcompress : CompressibleByMoreThan universalFeatureConstant x) :
+    IsFeature runs universalFeature x := by
+  obtain ⟨r, hrLen, hrRuns⟩ := exists_program_forComplexity x
+  refine ⟨UniversalMachine.codeToProgram (Nat.Partrec.Code.const (BitString.toNatExact r)), ?_⟩
+  refine ⟨r, ?_, ?_, ?_⟩
+  · exact (UniversalMachine.runs_const_iff (BitString.toNatExact r) x r).2
+      (BitString.ofNatExact_toNatExact r).symm
+  · exact (UniversalMachine.runs_universalFeature_iff r x).2 hrRuns
+  · simpa [CompressionCondition, CompressibleByMoreThan,
+      UniversalMachine.universalFeatureConstant, hrLen, Nat.add_comm] using hcompress
+
+theorem universalFeature_isUniversalWithConstant :
+    IsUniversalFeatureWithConstant universalFeature universalFeatureConstant := by
+  intro x hx
+  exact universalFeature_isFeature_of_compressibleByMoreThan x hx
+
+theorem universalFeature_isUniversal : IsUniversalFeature universalFeature := by
+  exact ⟨universalFeatureConstant, universalFeature_isUniversalWithConstant⟩
+
+theorem shortestFeature_le_universalFeatureConstant {f x : Program}
+    (hshort : IsShortestFeature runs f x)
+    (hcompress : CompressibleByMoreThan universalFeatureConstant x) :
+    BitString.blen f ≤ universalFeatureConstant := by
+  exact hshort.2 universalFeature (universalFeature_isFeature_of_compressibleByMoreThan x hcompress)
+
 end Compression
 
 end IcTheory

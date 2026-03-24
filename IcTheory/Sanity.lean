@@ -75,6 +75,10 @@ example : UniversalMachine.ConditionalComplexity [true, false, true] [] ≤
   exact (runs_const_iff (toNatExact [true, false, true]) [] [true, false, true]).2
     (ofNatExact_toNatExact [true, false, true]).symm
 
+example : runs universalFeature (codeToProgram (Nat.Partrec.Code.const 5)) (ofNatExact 5) := by
+  rw [runs_universalFeature_iff]
+  exact (runs_const_iff 5 [] (ofNatExact 5)).2 rfl
+
 end Sanity
 
 end IcTheory

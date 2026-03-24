@@ -75,7 +75,37 @@ theorem runs_iff (p input output : BitString) :
     simpa using h'.symm
   · intro h
     subst output
-    simpa using Nat.Partrec.Code.eval_const n (BitString.toNatExact input)
+    simp [Nat.Partrec.Code.eval_const]
+
+theorem evalOnEmpty_partrec :
+    Nat.Partrec fun n => Code.eval (Denumerable.ofNat Code n) 0 := by
+  exact Partrec.nat_iff.1
+    (Code.eval_part.comp (Computable.ofNat Code) (Computable.const (α := ℕ) 0))
+
+theorem exists_universalFeatureCode :
+    ∃ c : Code, ∀ n : Nat, Code.eval c n = Code.eval (Denumerable.ofNat Code n) 0 := by
+  obtain ⟨c, hc⟩ := Code.exists_code.1 evalOnEmpty_partrec
+  exact ⟨c, fun n => by simpa using congrFun hc n⟩
+
+noncomputable def universalFeatureCode : Code :=
+  Classical.choose exists_universalFeatureCode
+
+theorem eval_universalFeatureCode (n : Nat) :
+    Code.eval universalFeatureCode n = Code.eval (Denumerable.ofNat Code n) 0 :=
+  Classical.choose_spec exists_universalFeatureCode n
+
+/-- A fixed universal feature program that evaluates the residual on empty input. -/
+noncomputable def universalFeature : Program :=
+  codeToProgram universalFeatureCode
+
+/-- The description-length overhead contributed by `universalFeature`. -/
+noncomputable def universalFeatureConstant : Nat :=
+  BitString.blen universalFeature
+
+@[simp] theorem runs_universalFeature_iff (r x : BitString) :
+    runs universalFeature r x ↔ runs r [] x := by
+  rw [universalFeature, runs_codeToProgram_iff, runs_iff]
+  simp [programToCode, eval_universalFeatureCode, BitString.toNatExact]
 
 end UniversalMachine
 
