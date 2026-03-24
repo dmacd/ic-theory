@@ -1,4 +1,4 @@
-import IcTheory.Computability.UniversalMachine
+import IcTheory.Computability
 
 namespace IcTheory
 
@@ -68,6 +68,12 @@ example : runs (codeToProgram Nat.Partrec.Code.id) [true, false, true] [true, fa
 
 example : runs (codeToProgram (Nat.Partrec.Code.const 5)) [] (ofNatExact 5) := by
   exact (runs_const_iff 5 [] (ofNatExact 5)).2 rfl
+
+example : UniversalMachine.ConditionalComplexity [true, false, true] [] ≤
+    blen (codeToProgram (Nat.Partrec.Code.const (toNatExact [true, false, true]))) := by
+  apply UniversalMachine.conditionalComplexity_le_length
+  exact (runs_const_iff (toNatExact [true, false, true]) [] [true, false, true]).2
+    (ofNatExact_toNatExact [true, false, true]).symm
 
 end Sanity
 
