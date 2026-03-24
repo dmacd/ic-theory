@@ -263,6 +263,146 @@ noncomputable def swapJointPrefixLength : Nat :=
       rfl
   simpa using h
 
+/-- Machine-readable payload for postcomposing a shortest description with a fixed program `g`
+and empty residual. -/
+noncomputable def fixedPostcomposePayload (s f g : Program) : Program :=
+  JointUpperPayload s f [] g
+
+/-- Prefix witness built from a shortest description and a fixed postcomposition layer. -/
+noncomputable def fixedPostcomposeWitness (u g s f : Program) : Program :=
+  BitString.pair u (BitString.e2 (fixedPostcomposePayload s f g))
+
+/-- Constant contribution of the postcomposition interpreter and the fixed program `g`. -/
+noncomputable def fixedPostcomposeWitnessOverhead (u g : Program) : Nat :=
+  2 * BitString.blen u + 3 * BitString.blen (BitString.pair g (BitString.e2 [])) + 15
+
+theorem prefixRuns_fixedPostcomposeWitness_of_runs {u g f s x y : Program}
+    (hu : IsPostComposeInterpreter u)
+    (hf : runs f (packedInput [] s) x)
+    (hg : runs g (packedInput x []) y) :
+    PrefixRuns (fixedPostcomposeWitness u g s f) [] y := by
+  refine ⟨u, fixedPostcomposePayload s f g, rfl, ?_⟩
+  exact hu f s g [] x y hf hg
+
+private theorem blen_ofNat_le_logPenalty_add_const {m n c : Nat}
+    (hm : m ≤ 3 * n + (c + 3)) :
+    BitString.blen (BitString.ofNat m) ≤ logPenalty n + c + 5 := by
+  let a : Nat := 2 ^ (c + 4)
+  have ha16 : 16 ≤ a := by
+    dsimp [a]
+    calc
+      16 = 2 ^ 4 := by norm_num
+      _ ≤ 2 ^ (c + 4) := by
+        exact Nat.pow_le_pow_right (by decide) (by omega)
+  have ha3 : 3 ≤ a := Nat.le_trans (by decide : 3 ≤ 16) ha16
+  have hac : c + 4 ≤ a := by
+    dsimp [a]
+    exact Nat.le_of_lt (show c + 4 < 2 ^ (c + 4) from Nat.lt_two_pow_self)
+  have hscale : m ≤ (n + 1) * a - 1 := by
+    calc
+      m ≤ 3 * n + (c + 3) := hm
+      _ ≤ a * n + (a - 1) := by
+        have hmul : 3 * n ≤ a * n := by
+          simpa [Nat.mul_comm, Nat.mul_left_comm, Nat.mul_assoc] using Nat.mul_le_mul_right n ha3
+        have hc : c + 3 ≤ a - 1 := by
+          exact Nat.le_sub_one_of_lt (lt_of_lt_of_le (Nat.lt_succ_self (c + 3)) hac)
+        omega
+      _ = (n + 1) * a - 1 := by
+        have ha1 : 1 ≤ a := Nat.le_trans (by decide : 1 ≤ 16) ha16
+        calc
+          a * n + (a - 1) = a * n + a - 1 := by rw [Nat.add_sub_assoc ha1]
+          _ = n * a + a - 1 := by rw [Nat.mul_comm]
+          _ = (n + 1) * a - 1 := by rw [Nat.add_mul, one_mul]
+  have h :=
+    blen_ofNat_le_logPenalty_add_of_le_twoPow_mul_succ_sub_one
+      (m := m) (n := n) (k := c + 4) hscale
+  omega
+
+private theorem fixedPostcomposeWitness_length_bound_const {m n u c : Nat}
+    (hm : m ≤ n + 2 * logPenalty n + (c + 3)) :
+    2 * u + m + 2 * BitString.blen (BitString.ofNat m) + 2 ≤
+      n + 4 * logPenalty n + (2 * u + 3 * c + 15) := by
+  have hmLinear : m ≤ 3 * n + (c + 3) := by
+    have hlog := logPenalty_le_self n
+    omega
+  have hlogm := blen_ofNat_le_logPenalty_add_const (c := c) hmLinear
+  omega
+
+private theorem blen_fixedPostcomposePayload_le_of_length {g f s : Program} {n : Nat}
+    (hdesc : BitString.blen (BitString.pair f (BitString.e2 s)) = n) :
+    BitString.blen (fixedPostcomposePayload s f g) ≤
+      n + 2 * logPenalty n + (BitString.blen (BitString.pair g (BitString.e2 [])) + 3) := by
+  have h := BitString.blen_exactQuadPayload_le_twoPrefixPrograms s f [] g
+  dsimp [fixedPostcomposePayload, JointUpperPayload] at h ⊢
+  rw [hdesc] at h
+  have htail :
+      2 * BitString.blen (BitString.ofNat n) + 1 ≤
+        2 * logPenalty n + 3 := by
+    have hlog := blen_ofNat_le_logPenalty_succ n
+    omega
+  calc
+    BitString.blen (BitString.exactQuadPayload s f [] g) ≤
+        n + BitString.blen (BitString.pair g (BitString.e2 [])) +
+          (2 * BitString.blen (BitString.ofNat n) + 1) := h
+    _ ≤ n + BitString.blen (BitString.pair g (BitString.e2 [])) + (2 * logPenalty n + 3) := by
+      omega
+    _ = n + 2 * logPenalty n + (BitString.blen (BitString.pair g (BitString.e2 [])) + 3) := by
+      omega
+
+/-- Composing a shortest prefix description with a fixed postprocessor adds only logarithmic
+overhead. -/
+theorem prefixComplexity_logLe_of_fixedPostcompose {u g x y : Program}
+    (hu : IsPostComposeInterpreter u)
+    (hg : runs g (packedInput x []) y) :
+    LogLe (PrefixComplexity y) (PrefixComplexity x) (PrefixComplexity x) := by
+  obtain ⟨p, hpLen, hpRuns⟩ := exists_program_forPrefixConditionalComplexity x []
+  rcases hpRuns with ⟨f, s, hpEq, hf⟩
+  let q : Program := fixedPostcomposeWitness u g s f
+  have hqRuns : PrefixRuns q [] y := by
+    simpa [q] using prefixRuns_fixedPostcomposeWitness_of_runs (u := u) (g := g) hu hf hg
+  have hy : PrefixComplexity y ≤ BitString.blen q := by
+    simpa [PrefixComplexity] using prefixConditionalComplexity_le_length hqRuns
+  have hdesc : BitString.blen (BitString.pair f (BitString.e2 s)) = PrefixComplexity x := by
+    rw [← hpEq, hpLen, PrefixComplexity]
+  have hpayload :
+      BitString.blen (fixedPostcomposePayload s f g) ≤
+        PrefixComplexity x + 2 * logPenalty (PrefixComplexity x) +
+          (BitString.blen (BitString.pair g (BitString.e2 [])) + 3) := by
+    simpa [hdesc] using blen_fixedPostcomposePayload_le_of_length (g := g) (f := f) (s := s) hdesc
+  have hshape :
+      BitString.blen q =
+        2 * BitString.blen u + BitString.blen (fixedPostcomposePayload s f g) +
+          2 * BitString.blen (BitString.ofNat (BitString.blen (fixedPostcomposePayload s f g))) +
+            2 := by
+    simp [q, fixedPostcomposeWitness, BitString.blen_pair, BitString.blen_e2, Nat.add_assoc,
+      Nat.add_comm, Nat.add_left_comm]
+    omega
+  have hqBound :
+      BitString.blen q ≤
+        PrefixComplexity x + 4 * logPenalty (PrefixComplexity x) +
+          fixedPostcomposeWitnessOverhead u g := by
+    rw [hshape]
+    unfold fixedPostcomposeWitnessOverhead
+    exact fixedPostcomposeWitness_length_bound_const
+      (m := BitString.blen (fixedPostcomposePayload s f g))
+      (n := PrefixComplexity x)
+      (u := BitString.blen u)
+      (c := BitString.blen (BitString.pair g (BitString.e2 [])))
+      hpayload
+  exact ⟨4, fixedPostcomposeWitnessOverhead u g, le_trans hy hqBound⟩
+
+/-- One-sided swap invariance for joint prefix complexity. -/
+theorem jointSwapLogLe (x y : Program) :
+    LogLe (JointComplexity x y) (JointComplexity y x) (JointComplexity y x) := by
+  simpa [JointComplexity] using
+    (prefixComplexity_logLe_of_fixedPostcompose
+      (u := postComposeInterpreter)
+      (g := swapJoint)
+      (x := packedInput y x)
+      (y := packedInput x y)
+      postComposeInterpreter_isPostComposeInterpreter
+      (by simpa using runs_swapJoint_iff y x))
+
 /-- Upper chain-rule component for joint prefix complexity at scale `n`. -/
 def JointUpperChainRuleAt (n : Nat) (x y : Program) : Prop :=
   LogLe (JointComplexity x y)
@@ -278,6 +418,19 @@ def JointLowerChainRuleAt (n : Nat) (x y : Program) : Prop :=
 /-- Swap invariance for the chosen joint encoding at scale `n`. -/
 def JointSwapInvariantAt (n : Nat) (x y : Program) : Prop :=
   LogEq (JointComplexity x y) (JointComplexity y x) n
+
+/-- Joint prefix complexity is swap-invariant up to logarithmic slack at the natural max scale. -/
+theorem jointSwapInvariantAt_max (x y : Program) :
+    JointSwapInvariantAt (max (JointComplexity x y) (JointComplexity y x)) x y := by
+  refine ⟨?_, ?_⟩
+  · exact logLe_of_scale_le (jointSwapLogLe x y) (le_max_right _ _)
+  · exact logLe_of_scale_le (jointSwapLogLe y x) (le_max_left _ _)
+
+theorem jointSwapInvariantAt_of_bounds {x y : Program} {n : Nat}
+    (hxy : JointComplexity x y ≤ n)
+    (hyx : JointComplexity y x ≤ n) :
+    JointSwapInvariantAt n x y := by
+  exact logEq_of_scale_le (jointSwapInvariantAt_max x y) (max_le_iff.mpr ⟨hxy, hyx⟩)
 
 /-- Standard SoI consequence from lower chain rule, swap invariance, and upper chain rule. -/
 theorem symmetricInformationBound_of_jointRulesAt {n : Nat} {x y : Program}
