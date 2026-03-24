@@ -6,6 +6,24 @@ namespace UniversalMachine
 
 noncomputable section
 
+/-- Payload format for the missing joint upper-chain interpreter.
+It stores the residual/interpreter pieces of two prefix descriptions in a machine-readable exact
+code. -/
+def JointUpperPayload (s f r g : Program) : Program :=
+  BitString.exactQuadPayload s f r g
+
+@[simp] theorem decode_jointUpperPayload (s f r g : Program) :
+    BitString.decodeExactQuadPayload (JointUpperPayload s f r g) = (s, f, r, g) := by
+  simp [JointUpperPayload]
+
+/-- Specification of a fixed interpreter witnessing the upper chain rule:
+it reconstructs `x` from `(f, s)`, then `y` from `(g, r)`, and outputs the joint encoding. -/
+def IsJointUpperInterpreter (u : Program) : Prop :=
+  ∀ f s g r x y : Program,
+    runs f (packedInput [] s) x →
+      runs g (packedInput x r) y →
+        runs u (packedInput [] (JointUpperPayload s f r g)) (packedInput x y)
+
 /-- Upper chain-rule component for joint prefix complexity at scale `n`. -/
 def JointUpperChainRuleAt (n : Nat) (x y : Program) : Prop :=
   LogLe (JointComplexity x y)
@@ -31,6 +49,71 @@ theorem symmetricInformationBound_of_jointRulesAt {n : Nat} {x y : Program}
       (PrefixComplexity y + PrefixConditionalComplexity x y)
       n := by
   exact logLe_trans hlower (logLe_trans hswap.1 hupper)
+
+/-- Constant contribution of a fixed upper-chain interpreter inside the composed prefix witness. -/
+def jointUpperInterpreterPrefixOverhead (u : Program) : Nat :=
+  2 * BitString.blen u + 11
+
+/-- A fixed interpreter satisfying `IsJointUpperInterpreter` yields the standard joint upper
+chain rule at the natural scale `K(x) + K(y | x)`. -/
+theorem jointUpperChainRuleAt_complexityScale_of_interpreter {u x y : Program}
+    (hu : IsJointUpperInterpreter u) :
+    JointUpperChainRuleAt (PrefixComplexity x + PrefixConditionalComplexity y x) x y := by
+  obtain ⟨p₁, hp₁Len, hp₁Runs⟩ := exists_program_forPrefixConditionalComplexity x []
+  rcases hp₁Runs with ⟨f, s, hp₁Eq, hf⟩
+  obtain ⟨p₂, hp₂Len, hp₂Runs⟩ := exists_program_forPrefixConditionalComplexity y x
+  rcases hp₂Runs with ⟨g, r, hp₂Eq, hg⟩
+  let payload : Program := JointUpperPayload s f r g
+  let p : Program := BitString.pair u (BitString.e2 payload)
+  have hpRuns : PrefixRuns p [] (packedInput x y) := by
+    refine ⟨u, payload, rfl, ?_⟩
+    exact hu f s g r x y hf hg
+  have hjoint : JointComplexity x y ≤ BitString.blen p := by
+    simpa [JointComplexity, PrefixComplexity] using prefixConditionalComplexity_le_length hpRuns
+  have hpayload :
+      BitString.blen payload ≤
+        PrefixComplexity x + PrefixConditionalComplexity y x +
+          (2 * BitString.blen (BitString.ofNat (PrefixComplexity x)) + 1) := by
+    have h := BitString.blen_exactQuadPayload_le_twoPrefixPrograms s f r g
+    rw [← hp₁Eq, ← hp₂Eq, hp₁Len, hp₂Len] at h
+    simpa [payload, JointUpperPayload, PrefixComplexity] using h
+  have hx :
+      PrefixComplexity x ≤ PrefixComplexity x + PrefixConditionalComplexity y x := by
+    exact Nat.le_add_right _ _
+  have hlogx :
+      BitString.blen (BitString.ofNat (PrefixComplexity x)) ≤
+        logPenalty (PrefixComplexity x + PrefixConditionalComplexity y x) + 1 := by
+    have hsize := blen_ofNat_le_logPenalty_succ (PrefixComplexity x)
+    have hmono := logPenalty_mono hx
+    omega
+  have hpayloadScale :
+      BitString.blen payload ≤
+        4 * (PrefixComplexity x + PrefixConditionalComplexity y x) + 1 := by
+    have hsize := BitString.blen_ofNat_le_self (PrefixComplexity x)
+    omega
+  have hlogPayload :
+      BitString.blen (BitString.ofNat (BitString.blen payload)) ≤
+        logPenalty (PrefixComplexity x + PrefixConditionalComplexity y x) + 3 := by
+    exact blen_ofNat_le_logPenalty_add_three_of_le_four_mul_add_three
+      (by omega : BitString.blen payload ≤
+        4 * (PrefixComplexity x + PrefixConditionalComplexity y x) + 3)
+  have hjoint' :
+      JointComplexity x y ≤
+        1 + (1 + (2 * BitString.blen u +
+          (BitString.blen payload +
+            2 * BitString.blen (BitString.ofNat (BitString.blen payload))))) := by
+    simpa [p, BitString.blen_pair, BitString.blen_e2, Nat.add_assoc, Nat.add_comm,
+      Nat.add_left_comm] using hjoint
+  refine ⟨4, jointUpperInterpreterPrefixOverhead u, ?_⟩
+  unfold jointUpperInterpreterPrefixOverhead
+  omega
+
+/-- The same upper-chain theorem, rescaled along any larger comparison parameter. -/
+theorem jointUpperChainRuleAt_of_interpreter_of_scale_le {u x y : Program} {n : Nat}
+    (hu : IsJointUpperInterpreter u)
+    (hscale : PrefixComplexity x + PrefixConditionalComplexity y x ≤ n) :
+    JointUpperChainRuleAt n x y := by
+  exact logLe_of_scale_le (jointUpperChainRuleAt_complexityScale_of_interpreter hu) hscale
 
 end
 

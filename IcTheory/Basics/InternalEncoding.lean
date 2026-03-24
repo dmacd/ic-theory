@@ -14,6 +14,10 @@ This is not the paper's public pairing; it is a machine-facing payload format. -
 def exactPairPayload (x y : BitString) : BitString :=
   exactLengthCode x ++ x ++ y
 
+/-- Nested exact payload used to package four machine components. -/
+def exactQuadPayload (a b c d : BitString) : BitString :=
+  exactPairPayload (exactPairPayload a b) (exactPairPayload c d)
+
 @[simp] theorem blen_exactLengthCode (x : BitString) :
     blen (exactLengthCode x) = 2 * blen (ofNatExact (blen x)) + 1 := by
   simp [exactLengthCode]
@@ -22,6 +26,37 @@ def exactPairPayload (x y : BitString) : BitString :=
     blen (exactPairPayload x y) =
       blen x + blen y + (2 * blen (ofNatExact (blen x)) + 1) := by
   simp [exactPairPayload, exactLengthCode, Nat.add_assoc, Nat.add_comm]
+
+theorem blen_exactPairPayload_le_prefixProgram (r f : BitString) :
+    blen (exactPairPayload r f) ≤ blen (BitString.pair f (BitString.e2 r)) := by
+  rw [blen_exactPairPayload, blen_pair, blen_e2]
+  have henc : blen (ofNatExact (blen r)) ≤ blen (ofNat (blen r)) :=
+    blen_ofNatExact_le_ofNat (blen r)
+  omega
+
+@[simp] theorem blen_exactQuadPayload (a b c d : BitString) :
+    blen (exactQuadPayload a b c d) =
+      blen (exactPairPayload a b) + blen (exactPairPayload c d) +
+        (2 * blen (ofNatExact (blen (exactPairPayload a b))) + 1) := by
+  simp [exactQuadPayload, blen_exactPairPayload, Nat.add_assoc, Nat.add_comm]
+
+theorem blen_exactQuadPayload_le_twoPrefixPrograms (r₁ f₁ r₂ f₂ : BitString) :
+    blen (exactQuadPayload r₁ f₁ r₂ f₂) ≤
+      blen (BitString.pair f₁ (BitString.e2 r₁)) +
+        blen (BitString.pair f₂ (BitString.e2 r₂)) +
+        (2 * blen (BitString.ofNat (blen (BitString.pair f₁ (BitString.e2 r₁)))) + 1) := by
+  rw [blen_exactQuadPayload]
+  let p₁ := BitString.pair f₁ (BitString.e2 r₁)
+  let q₁ := exactPairPayload r₁ f₁
+  have hq₁ : blen q₁ ≤ blen p₁ := by
+    simpa [p₁, q₁] using blen_exactPairPayload_le_prefixProgram r₁ f₁
+  have hq₂ : blen (exactPairPayload r₂ f₂) ≤ blen (BitString.pair f₂ (BitString.e2 r₂)) := by
+    simpa using blen_exactPairPayload_le_prefixProgram r₂ f₂
+  have henc :
+      blen (ofNatExact (blen q₁)) ≤ blen (ofNat (blen p₁)) := by
+    exact le_trans (blen_ofNatExact_le_ofNat (blen q₁)) (blen_ofNat_mono hq₁)
+  dsimp [p₁, q₁] at hq₁ henc ⊢
+  omega
 
 /-- Count the initial run of `true` bits. -/
 def countLeadingTrue : BitString → Nat
@@ -84,6 +119,13 @@ def decodeExactPairPayload (payload : BitString) : BitString × BitString :=
   let rest₂ := (splitAt lenCodeBits rest₁).2
   splitAt (toNatExact lenCode) rest₂
 
+/-- Decode the nested four-component payload used for joint-description composition. -/
+def decodeExactQuadPayload (payload : BitString) : BitString × BitString × BitString × BitString :=
+  let ab_cd := decodeExactPairPayload payload
+  let ab := decodeExactPairPayload ab_cd.1
+  let cd := decodeExactPairPayload ab_cd.2
+  (ab.1, ab.2, cd.1, cd.2)
+
 @[simp] theorem decodeExactPairPayload_exactPairPayload (x y : BitString) :
     decodeExactPairPayload (exactPairPayload x y) = (x, y) := by
   let k := blen (ofNatExact (blen x))
@@ -116,6 +158,10 @@ def decodeExactPairPayload (payload : BitString) : BitString × BitString :=
   simp_rw [hrest₂]
   rw [toNatExact_ofNatExact, splitAt_eq_take_drop]
   simp
+
+@[simp] theorem decodeExactQuadPayload_exactQuadPayload (a b c d : BitString) :
+    decodeExactQuadPayload (exactQuadPayload a b c d) = (a, b, c, d) := by
+  simp [decodeExactQuadPayload, exactQuadPayload]
 
 end BitString
 

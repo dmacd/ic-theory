@@ -36,6 +36,14 @@ theorem symmetricInformationBound_of_jointRules {f x : Program}
     SymmetricInformationBound f x := by
   exact symmetricInformationBound_of_jointRulesAt hjoint.1 hjoint.2.1 hjoint.2.2
 
+/-- A fixed upper-chain interpreter gives the Section 3.3 upper-chain hypothesis as soon as the
+natural complexity scale is known to lie below `l(x)`. -/
+theorem jointUpperAtFeatureScale_of_interpreter {u f x : Program}
+    (hu : IsJointUpperInterpreter u)
+    (hscale : PrefixComplexity f + PrefixConditionalComplexity x f ≤ BitString.blen x) :
+    JointUpperChainRuleAt (BitString.blen x) f x := by
+  exact jointUpperChainRuleAt_of_interpreter_of_scale_le hu hscale
+
 /-- Lemma 3.3 reduced to a symmetry-of-information hypothesis over the prefix layer. -/
 theorem lemma33_of_symmetry {f x : Program}
     (hfeature : IsFeature runs f x)

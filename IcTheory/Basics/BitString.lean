@@ -1,5 +1,6 @@
 import Mathlib.Computability.Encoding
 import Mathlib.Data.Nat.Bits
+import Mathlib.Data.Nat.Size
 
 namespace IcTheory
 
@@ -68,6 +69,54 @@ theorem blen_ofNat_mono {m n : Nat} (h : m ≤ n) :
     blen (ofNat m) ≤ blen (ofNat n) := by
   rw [blen_ofNat_eq_size, blen_ofNat_eq_size]
   exact Nat.size_le_size h
+
+theorem blen_ofNat_le_self (n : Nat) : blen (ofNat n) ≤ n := by
+  rw [blen_ofNat_eq_size]
+  exact Nat.size_le.2 n.lt_two_pow_self
+
+theorem blen_ofNatExact_le_size (n : Nat) : blen (ofNatExact n) ≤ Nat.size n := by
+  refine Nat.strong_induction_on n ?_
+  intro n ih
+  cases n with
+  | zero =>
+      simp [ofNatExact]
+  | succ n =>
+      rw [ofNatExact, blen_cons]
+      cases hb : Nat.bodd n
+      · have ih' := ih n.div2 (by
+          simpa [Nat.div2_val] using Nat.lt_succ_of_le (Nat.div_le_self n 2))
+        have hn : n = 2 * n.div2 := by
+          simpa [Nat.bit_val, hb] using (Nat.bit_bodd_div2 n).symm
+        have hsucc : n.succ = Nat.bit true n.div2 := by
+          rw [hn, Nat.bit_val]
+          simp
+        have hbit : Nat.bit true n.div2 ≠ 0 := by
+          rw [Nat.bit_val]
+          simp
+        have hs : Nat.size (n + 1) = Nat.size (Nat.bit true n.div2) := by
+          simpa using congrArg Nat.size hsucc
+        rw [hs, Nat.size_bit hbit]
+        exact Nat.succ_le_succ ih'
+      · have ih' := ih n.div2 (by
+          simpa [Nat.div2_val] using Nat.lt_succ_of_le (Nat.div_le_self n 2))
+        have hn : n = 2 * n.div2 + 1 := by
+          simpa [Nat.bit_val, hb] using (Nat.bit_bodd_div2 n).symm
+        have hsucc : n.succ = Nat.bit false (n.div2 + 1) := by
+          calc
+            n.succ = 2 * n.div2 + 2 := by omega
+            _ = 2 * (n.div2 + 1) := by omega
+            _ = Nat.bit false (n.div2 + 1) := by simp [Nat.bit_val]
+        have hbit : Nat.bit false (n.div2 + 1) ≠ 0 := by
+          rw [Nat.bit_val]
+          simp
+        have hs : Nat.size (n + 1) = Nat.size (Nat.bit false (n.div2 + 1)) := by
+          simpa using congrArg Nat.size hsucc
+        rw [hs, Nat.size_bit hbit]
+        exact Nat.succ_le_succ (le_trans ih' (Nat.size_le_size (Nat.le_succ _)))
+
+theorem blen_ofNatExact_le_ofNat (n : Nat) : blen (ofNatExact n) ≤ blen (ofNat n) := by
+  rw [blen_ofNat_eq_size]
+  exact blen_ofNatExact_le_size n
 
 @[simp] theorem toNatExact_ofNatExact (n : Nat) : toNatExact (ofNatExact n) = n := by
   refine Nat.strong_induction_on n ?_

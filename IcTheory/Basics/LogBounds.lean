@@ -21,6 +21,11 @@ def LogEq (a b n : Nat) : Prop :=
 theorem logPenalty_pos (n : Nat) : 0 ≤ logPenalty n := by
   exact Nat.zero_le _
 
+theorem logPenalty_mono {m n : Nat} (h : m ≤ n) : logPenalty m ≤ logPenalty n := by
+  unfold logPenalty
+  rw [Nat.log2_eq_log_two, Nat.log2_eq_log_two]
+  exact Nat.log_mono_right (Nat.succ_le_succ h)
+
 theorem logLe_of_le {a b n : Nat} (h : a ≤ b) : LogLe a b n := by
   refine ⟨0, 0, ?_⟩
   simpa [LogLe, logPenalty] using h
@@ -49,6 +54,16 @@ theorem LogEq.symm {a b n : Nat} (h : LogEq a b n) : LogEq b a n :=
 theorem LogEq.trans {a b c n : Nat} (hab : LogEq a b n) (hbc : LogEq b c n) : LogEq a c n := by
   exact ⟨logLe_trans hab.1 hbc.1, logLe_trans hbc.2 hab.2⟩
 
+theorem logLe_of_scale_le {a b m n : Nat} (hab : LogLe a b m) (hmn : m ≤ n) : LogLe a b n := by
+  rcases hab with ⟨c, d, h⟩
+  have hlog : c * logPenalty m ≤ c * logPenalty n :=
+    Nat.mul_le_mul_left c (logPenalty_mono hmn)
+  refine ⟨c, d, ?_⟩
+  omega
+
+theorem logEq_of_scale_le {a b m n : Nat} (hab : LogEq a b m) (hmn : m ≤ n) : LogEq a b n := by
+  exact ⟨logLe_of_scale_le hab.1 hmn, logLe_of_scale_le hab.2 hmn⟩
+
 theorem blen_ofNat_le_logPenalty_succ (n : Nat) :
     BitString.blen (BitString.ofNat n) ≤ logPenalty n + 1 := by
   rw [BitString.blen_ofNat_eq_size, logPenalty]
@@ -60,5 +75,24 @@ theorem blen_ofNat_le_logPenalty_succ (n : Nat) :
       exact Nat.add_le_add_right (by
         rw [Nat.log2_eq_log_two, Nat.log2_eq_log_two]
         exact Nat.log_mono_right (Nat.le_add_right n 1)) 1
+
+theorem logPenalty_four_mul_add_three (n : Nat) :
+    logPenalty (4 * n + 3) = logPenalty n + 2 := by
+  unfold logPenalty
+  rw [show 4 * n + 3 + 1 = (n + 1) * 2 * 2 by omega]
+  rw [Nat.log2_eq_log_two, Nat.log2_eq_log_two]
+  have h1 : Nat.log 2 ((n + 1) * 2 * 2) = Nat.log 2 ((n + 1) * 2) + 1 := by
+    rw [Nat.log_mul_base Nat.one_lt_two (Nat.mul_ne_zero (Nat.succ_ne_zero _) (by decide))]
+  have h2 : Nat.log 2 ((n + 1) * 2) = Nat.log 2 (n + 1) + 1 := by
+    rw [Nat.log_mul_base Nat.one_lt_two (Nat.succ_ne_zero _)]
+  rw [h1, h2]
+
+theorem blen_ofNat_le_logPenalty_add_three_of_le_four_mul_add_three {m n : Nat}
+    (h : m ≤ 4 * n + 3) :
+    BitString.blen (BitString.ofNat m) ≤ logPenalty n + 3 := by
+  have hlog : logPenalty m ≤ logPenalty (4 * n + 3) := logPenalty_mono h
+  have hsize := blen_ofNat_le_logPenalty_succ m
+  rw [logPenalty_four_mul_add_three] at hlog
+  omega
 
 end IcTheory
