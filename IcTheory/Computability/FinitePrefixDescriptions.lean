@@ -199,6 +199,103 @@ theorem length_jointRightOutputsUpToLength_le (x : Program) (n : Nat) :
       (prefixOutputsUpToLength [] n))
     (length_prefixOutputsUpToLength_le [] n)
 
+theorem exists_jointRightIndex_of_jointComplexity_le {x y : Program} {n : Nat}
+    (hxy : JointComplexity x y ≤ n) :
+    ∃ i < 2 ^ (n + 1) - 1, (jointRightOutputsUpToLength x n)[i]? = some y := by
+  have hmem := mem_jointRightOutputsUpToLength_of_jointComplexity_le (x := x) (y := y) hxy
+  rw [List.mem_iff_getElem?] at hmem
+  rcases hmem with ⟨i, hi⟩
+  refine ⟨i, ?_, hi⟩
+  have hiLen : i < (jointRightOutputsUpToLength x n).length := by
+    by_contra hge
+    rw [List.getElem?_eq_none (Nat.not_lt.mp hge)] at hi
+    simp at hi
+  exact lt_of_lt_of_le hiLen (length_jointRightOutputsUpToLength_le x n)
+
+/-- Payload encoding used to specify a bounded candidate via `(n, i)`. -/
+def jointRightPayload (n i : Nat) : Program :=
+  BitString.exactPairPayload (BitString.ofNatExact n) (BitString.ofNatExact i)
+
+@[simp] theorem decode_jointRightPayload (n i : Nat) :
+    BitString.decodeExactPairPayload (jointRightPayload n i) =
+      (BitString.ofNatExact n, BitString.ofNatExact i) := by
+  simp [jointRightPayload]
+
+/-- Specification of an interpreter that enumerates the bounded candidate family for fixed `x`. -/
+def IsJointRightEnumerator (u : Program) : Prop :=
+  ∀ x : Program, ∀ n i : Nat, ∀ y : Program,
+    (jointRightOutputsUpToLength x n)[i]? = some y →
+      runs u (packedInput x (jointRightPayload n i)) y
+
+private theorem blen_jointRightPayload_le_of_index_lt {n i : Nat}
+    (hi : i < 2 ^ (n + 1) - 1) :
+    BitString.blen (jointRightPayload n i) ≤ n + 3 * logPenalty n + 5 := by
+  have hn :
+      BitString.blen (BitString.ofNatExact n) ≤ logPenalty n + 1 := by
+    exact le_trans (BitString.blen_ofNatExact_le_ofNat n) (blen_ofNat_le_logPenalty_succ n)
+  have hiPow : i < 2 ^ (n + 1) := by
+    exact lt_of_lt_of_le hi (Nat.sub_le _ _)
+  have hiBits :
+      BitString.blen (BitString.ofNatExact i) ≤ n + 1 := by
+    exact le_trans (BitString.blen_ofNatExact_le_size i) ((Nat.size_le).2 hiPow)
+  have hheader :
+      BitString.blen (BitString.ofNatExact (BitString.blen (BitString.ofNatExact n))) ≤
+        logPenalty n + 1 := by
+    exact le_trans
+      (BitString.blen_ofNatExact_le_size _)
+      (le_trans ((Nat.size_le).2 (BitString.blen (BitString.ofNatExact n)).lt_two_pow_self) hn)
+  rw [jointRightPayload, BitString.blen_exactPairPayload]
+  omega
+
+private theorem blen_ofNat_jointRightPayload_le_of_index_lt {n i : Nat}
+    (hi : i < 2 ^ (n + 1) - 1) :
+    BitString.blen (BitString.ofNat (BitString.blen (jointRightPayload n i))) ≤ logPenalty n + 4 := by
+  have hpayload : BitString.blen (jointRightPayload n i) ≤ n + 3 * logPenalty n + 5 :=
+    blen_jointRightPayload_le_of_index_lt hi
+  have hlinear : BitString.blen (jointRightPayload n i) ≤ 4 * n + 5 := by
+    have hlog := logPenalty_le_self n
+    omega
+  exact blen_ofNat_le_logPenalty_add_of_le_twoPow_mul_succ_sub_one
+    (n := n) (k := 3) (by omega : BitString.blen (jointRightPayload n i) ≤ (n + 1) * 2 ^ 3 - 1)
+
+/-- A bounded enumerator turns a joint-complexity bound into an indexed conditional description
+of `y` from `x`. This is the machine-facing enumeration lemma behind the lower-chain argument. -/
+theorem prefixConditionalComplexity_logLe_of_jointRightEnumerator {u x y : Program} {n : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hxy : JointComplexity x y ≤ n) :
+    LogLe (PrefixConditionalComplexity y x) n n := by
+  obtain ⟨i, hi, hget⟩ := exists_jointRightIndex_of_jointComplexity_le (x := x) (y := y) hxy
+  let payload : Program := jointRightPayload n i
+  let p : Program := BitString.pair u (BitString.e2 payload)
+  have hpRuns : PrefixRuns p x y := by
+    refine ⟨u, payload, rfl, ?_⟩
+    simpa [payload] using hu x n i y hget
+  have hcond : PrefixConditionalComplexity y x ≤ BitString.blen p := by
+    exact prefixConditionalComplexity_le_length hpRuns
+  have hpayload :
+      BitString.blen payload ≤ n + 3 * logPenalty n + 5 :=
+    blen_jointRightPayload_le_of_index_lt hi
+  have hlogPayload :
+      BitString.blen (BitString.ofNat (BitString.blen payload)) ≤ logPenalty n + 4 := by
+    simpa [payload] using blen_ofNat_jointRightPayload_le_of_index_lt (n := n) hi
+  have hp :
+      BitString.blen p ≤ n + 5 * logPenalty n + (2 * BitString.blen u + 15) := by
+    have hpShape :
+        BitString.blen p =
+          1 + (1 + (2 * BitString.blen u +
+            (BitString.blen payload +
+              2 * BitString.blen (BitString.ofNat (BitString.blen payload))))) := by
+      simp [p, BitString.blen_pair, BitString.blen_e2, Nat.add_assoc, Nat.add_comm,
+        Nat.add_left_comm]
+    have hpShape' :
+        BitString.blen p =
+          2 * BitString.blen u + BitString.blen payload +
+            2 * BitString.blen (BitString.ofNat (BitString.blen payload)) + 2 := by
+      omega
+    rw [hpShape']
+    omega
+  exact ⟨5, 2 * BitString.blen u + 15, le_trans hcond hp⟩
+
 end UniversalMachine
 
 end IcTheory
