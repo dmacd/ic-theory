@@ -379,6 +379,83 @@ theorem prefixConditionalComplexity_le_of_jointRightEnumerator_of_count
     exact lt_of_lt_of_le hi' hcount
   exact prefixConditionalComplexity_le_of_jointRightEnumerator_of_indexPow hu hget hiPow
 
+/-- Exact additive lower-chain bound from a fixed enumerator and a sharp fixed-`x` count bound. -/
+theorem prefixComplexity_add_prefixConditionalComplexity_le_of_jointRightEnumerator_of_count
+    {u x y : Program} {n c d k t : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount :
+      (jointRightOutputsUpToLength x n).length ≤ 2 ^ (n + c * logPenalty n + d - PrefixComplexity x))
+    (hpx : PrefixComplexity x ≤ n + k * logPenalty n + t)
+    (hxy : JointComplexity x y ≤ n) :
+    PrefixComplexity x + PrefixConditionalComplexity y x ≤
+      n + (c + k + 3) * logPenalty n + (d + t) +
+        2 * BitString.blen
+          (BitString.ofNat
+            ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) +
+        (2 * BitString.blen u + 6) := by
+  let tail : Nat :=
+    3 * logPenalty n +
+      2 * BitString.blen
+        (BitString.ofNat
+          ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) +
+      (2 * BitString.blen u + 6)
+  have h :=
+    prefixConditionalComplexity_le_of_jointRightEnumerator_of_count
+      (u := u) (x := x) (y := y) (n := n) (c := c) (d := d) hu hcount hxy
+  have h' :
+      PrefixConditionalComplexity y x ≤
+        (n + c * logPenalty n + d - PrefixComplexity x) + tail := by
+    calc
+      PrefixConditionalComplexity y x ≤
+          (n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n +
+            2 * BitString.blen
+              (BitString.ofNat
+                ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) +
+            (2 * BitString.blen u + 6) := h
+      _ = (n + c * logPenalty n + d - PrefixComplexity x) + tail := by
+        simp [tail, Nat.add_assoc]
+  have hcancel :
+      PrefixComplexity x + (n + c * logPenalty n + d - PrefixComplexity x) ≤
+        n + c * logPenalty n + d + (k * logPenalty n + t) := by
+    by_cases hle : PrefixComplexity x ≤ n + c * logPenalty n + d
+    · omega
+    · have hgt : n + c * logPenalty n + d < PrefixComplexity x := Nat.lt_of_not_ge hle
+      have hsub : n + c * logPenalty n + d - PrefixComplexity x = 0 := by
+        exact Nat.sub_eq_zero_of_le hgt.le
+      rw [hsub]
+      omega
+  have hsum :
+      PrefixComplexity x + PrefixConditionalComplexity y x ≤
+        PrefixComplexity x + (n + c * logPenalty n + d - PrefixComplexity x) + tail := by
+    calc
+      PrefixComplexity x + PrefixConditionalComplexity y x ≤
+          PrefixComplexity x +
+            ((n + c * logPenalty n + d - PrefixComplexity x) + tail) := by
+        exact Nat.add_le_add_left h' (PrefixComplexity x)
+      _ = PrefixComplexity x + (n + c * logPenalty n + d - PrefixComplexity x) + tail := by
+        omega
+  have hsum' :
+      PrefixComplexity x + PrefixConditionalComplexity y x ≤
+        n + c * logPenalty n + d + (k * logPenalty n + t) + tail := by
+    exact le_trans hsum (Nat.add_le_add_right hcancel tail)
+  have hmul :
+      (c + k + 3) * logPenalty n = c * logPenalty n + k * logPenalty n + 3 * logPenalty n := by
+    calc
+      (c + k + 3) * logPenalty n = ((c + k) + 3) * logPenalty n := by omega
+      _ = (c + k) * logPenalty n + 3 * logPenalty n := by rw [Nat.add_mul]
+      _ = c * logPenalty n + k * logPenalty n + 3 * logPenalty n := by rw [Nat.add_mul]
+  calc
+    PrefixComplexity x + PrefixConditionalComplexity y x ≤
+        n + c * logPenalty n + d + (k * logPenalty n + t) + tail := hsum'
+    _ = n + (c + k + 3) * logPenalty n + (d + t) +
+          2 * BitString.blen
+            (BitString.ofNat
+              ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) +
+          (2 * BitString.blen u + 6) := by
+      dsimp [tail]
+      rw [hmul]
+      omega
+
 end UniversalMachine
 
 end IcTheory

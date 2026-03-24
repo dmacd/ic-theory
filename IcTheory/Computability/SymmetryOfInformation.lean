@@ -1,4 +1,4 @@
-import IcTheory.Computability.PrefixInformation
+import IcTheory.Computability.FinitePrefixDescriptions
 
 namespace IcTheory
 
@@ -233,6 +233,10 @@ theorem postComposeInterpreter_isPostComposeInterpreter :
 def swapPackedCode : Code :=
   Code.pair Code.right Code.left
 
+/-- Plain code that extracts the left component of a packed pair. -/
+def leftPackedCode : Code :=
+  Code.comp Code.left Code.left
+
 /-- Plain code that extracts the left component of an outer packed input and then swaps the
 two components of that inner packed pair. -/
 def swapJointCode : Code :=
@@ -241,6 +245,10 @@ def swapJointCode : Code :=
 /-- Fixed program used to turn a description of `⟨x, y⟩` into one of `⟨y, x⟩`. -/
 noncomputable def swapJoint : Program :=
   codeToProgram swapJointCode
+
+/-- Fixed program used to turn a description of `⟨x, y⟩` into one of `x`. -/
+noncomputable def leftPacked : Program :=
+  codeToProgram leftPackedCode
 
 /-- Length of the fixed prefix program used for the swap post-processing step. -/
 noncomputable def swapJointPrefixLength : Nat :=
@@ -262,6 +270,12 @@ noncomputable def swapJointPrefixLength : Nat :=
     · intro _ _
       rfl
   simpa using h
+
+@[simp] theorem runs_leftPacked_iff (x y : Program) :
+    runs leftPacked (packedInput (packedInput x y) []) x := by
+  rw [leftPacked, runs_codeToProgram_iff]
+  rw [toNatExact_packedInput, toNatExact_packedInput]
+  simp [leftPackedCode, Nat.Partrec.Code.eval]
 
 /-- Machine-readable payload for postcomposing a shortest description with a fixed program `g`
 and empty residual. -/
@@ -403,6 +417,18 @@ theorem jointSwapLogLe (x y : Program) :
       postComposeInterpreter_isPostComposeInterpreter
       (by simpa using runs_swapJoint_iff y x))
 
+/-- Left projection from joint complexity costs only logarithmic overhead. -/
+theorem jointLeftProjectionLogLe (x y : Program) :
+    LogLe (PrefixComplexity x) (JointComplexity x y) (JointComplexity x y) := by
+  simpa [JointComplexity] using
+    (prefixComplexity_logLe_of_fixedPostcompose
+      (u := postComposeInterpreter)
+      (g := leftPacked)
+      (x := packedInput x y)
+      (y := x)
+      postComposeInterpreter_isPostComposeInterpreter
+      (by simpa using runs_leftPacked_iff x y))
+
 /-- Upper chain-rule component for joint prefix complexity at scale `n`. -/
 def JointUpperChainRuleAt (n : Nat) (x y : Program) : Prop :=
   LogLe (JointComplexity x y)
@@ -431,6 +457,162 @@ theorem jointSwapInvariantAt_of_bounds {x y : Program} {n : Nat}
     (hyx : JointComplexity y x ≤ n) :
     JointSwapInvariantAt n x y := by
   exact logEq_of_scale_le (jointSwapInvariantAt_max x y) (max_le_iff.mpr ⟨hxy, hyx⟩)
+
+/-- Count-bound assumption for the fixed-`x` candidate family underlying the lower chain rule. -/
+def JointRightCountBoundAt (n : Nat) (x y : Program) : Prop :=
+  ∃ c d : Nat,
+    (jointRightOutputsUpToLength x n).length ≤ 2 ^ (n + c * logPenalty n + d - PrefixComplexity x)
+
+/-- A fixed enumerator plus a sharp count bound, a logarithmic header bound, and a projection
+bound for `K(x)` give the lower chain rule at the natural scale `K(x, y)`. -/
+theorem jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_and_header
+    {u x y : Program} {c d e k t : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount :
+      (jointRightOutputsUpToLength x (JointComplexity x y)).length ≤
+        2 ^ (JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x))
+    (hheader :
+      BitString.blen
+          (BitString.ofNat
+            ((JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x) +
+              3 * logPenalty (JointComplexity x y) + 4)) ≤
+        logPenalty (JointComplexity x y) + e)
+    (hpx :
+      PrefixComplexity x ≤
+        JointComplexity x y + k * logPenalty (JointComplexity x y) + t) :
+    JointLowerChainRuleAt (JointComplexity x y) x y := by
+  let n : Nat := JointComplexity x y
+  have hsum :=
+    prefixComplexity_add_prefixConditionalComplexity_le_of_jointRightEnumerator_of_count
+      (u := u) (x := x) (y := y) (n := n) (c := c) (d := d) (k := k) (t := t)
+      hu hcount (by simpa [n] using hpx) le_rfl
+  have hheader' :
+      BitString.blen
+          (BitString.ofNat
+            ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) ≤
+        logPenalty n + e := by
+    simpa [n] using hheader
+  have htwice :
+      2 * BitString.blen
+          (BitString.ofNat
+            ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) ≤
+        2 * (logPenalty n + e) := by
+    exact Nat.mul_le_mul_left 2 hheader'
+  have hsum' :
+      PrefixComplexity x + PrefixConditionalComplexity y x ≤
+        n + (c + k + 3) * logPenalty n + (d + t) + 2 * (logPenalty n + e) +
+          (2 * BitString.blen u + 6) := by
+    calc
+      PrefixComplexity x + PrefixConditionalComplexity y x ≤
+          n + (c + k + 3) * logPenalty n + (d + t) +
+            2 * BitString.blen
+              (BitString.ofNat
+                ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) +
+            (2 * BitString.blen u + 6) := hsum
+      _ ≤ n + (c + k + 3) * logPenalty n + (d + t) + 2 * (logPenalty n + e) +
+            (2 * BitString.blen u + 6) := by
+        calc
+          n + (c + k + 3) * logPenalty n + (d + t) +
+              2 * BitString.blen
+                (BitString.ofNat
+                  ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) +
+              (2 * BitString.blen u + 6)
+              =
+              n + (c + k + 3) * logPenalty n + (d + t) +
+                (2 * BitString.blen
+                  (BitString.ofNat
+                    ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) +
+                  (2 * BitString.blen u + 6)) := by
+            omega
+          _ ≤ n + (c + k + 3) * logPenalty n + (d + t) +
+                (2 * (logPenalty n + e) + (2 * BitString.blen u + 6)) := by
+            exact Nat.add_le_add_left
+              (Nat.add_le_add_right htwice (2 * BitString.blen u + 6))
+              (n + (c + k + 3) * logPenalty n + (d + t))
+          _ =
+              n + (c + k + 3) * logPenalty n + (d + t) + 2 * (logPenalty n + e) +
+                (2 * BitString.blen u + 6) := by
+            omega
+  have hmul :
+      (c + k + 5) * logPenalty n = (c + k + 3) * logPenalty n + 2 * logPenalty n := by
+    have hck : c + k + 5 = (c + k + 3) + 2 := by omega
+    rw [hck, Nat.add_mul]
+  have hsum'' :
+      PrefixComplexity x + PrefixConditionalComplexity y x ≤
+        n + (c + k + 5) * logPenalty n + (d + t + 2 * e + (2 * BitString.blen u + 6)) := by
+    calc
+      PrefixComplexity x + PrefixConditionalComplexity y x ≤
+          n + (c + k + 3) * logPenalty n + (d + t) + 2 * (logPenalty n + e) +
+            (2 * BitString.blen u + 6) := hsum'
+      _ = n + (c + k + 5) * logPenalty n + (d + t + 2 * e + (2 * BitString.blen u + 6)) := by
+        rw [hmul, Nat.mul_add]
+        omega
+  refine ⟨c + k + 5, d + t + 2 * e + (2 * BitString.blen u + 6), ?_⟩
+  simpa [n] using hsum''
+
+theorem jointLowerChainRuleAt_of_jointRightEnumerator_of_count_and_header_of_scale_le
+    {u x y : Program} {n c d e k t : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount :
+      (jointRightOutputsUpToLength x (JointComplexity x y)).length ≤
+        2 ^ (JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x))
+    (hheader :
+      BitString.blen
+          (BitString.ofNat
+            ((JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x) +
+              3 * logPenalty (JointComplexity x y) + 4)) ≤
+        logPenalty (JointComplexity x y) + e)
+    (hpx :
+      PrefixComplexity x ≤
+        JointComplexity x y + k * logPenalty (JointComplexity x y) + t)
+    (hscale : JointComplexity x y ≤ n) :
+    JointLowerChainRuleAt n x y := by
+  exact logLe_of_scale_le
+    (jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_and_header
+      (u := u) (x := x) (y := y) (c := c) (d := d) (e := e) (k := k) (t := t)
+      hu hcount hheader hpx)
+    hscale
+
+/-- The left projection bound `K(x) ≤ K(x, y) + O(log K(x, y))` is available from the concrete
+postcomposition machinery, so the lower-chain rule needs only the sharp count and header bounds
+as extra hypotheses. -/
+theorem jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_and_header_of_leftProjection
+    {u x y : Program} {c d e : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount :
+      (jointRightOutputsUpToLength x (JointComplexity x y)).length ≤
+        2 ^ (JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x))
+    (hheader :
+      BitString.blen
+          (BitString.ofNat
+            ((JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x) +
+              3 * logPenalty (JointComplexity x y) + 4)) ≤
+        logPenalty (JointComplexity x y) + e) :
+    JointLowerChainRuleAt (JointComplexity x y) x y := by
+  obtain ⟨k, t, hpx⟩ := jointLeftProjectionLogLe x y
+  exact jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_and_header
+    (u := u) (x := x) (y := y) (c := c) (d := d) (e := e) (k := k) (t := t)
+    hu hcount hheader hpx
+
+theorem jointLowerChainRuleAt_of_jointRightEnumerator_of_count_and_header_of_leftProjection_of_scale_le
+    {u x y : Program} {n c d e : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount :
+      (jointRightOutputsUpToLength x (JointComplexity x y)).length ≤
+        2 ^ (JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x))
+    (hheader :
+      BitString.blen
+          (BitString.ofNat
+            ((JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x) +
+              3 * logPenalty (JointComplexity x y) + 4)) ≤
+        logPenalty (JointComplexity x y) + e)
+    (hscale : JointComplexity x y ≤ n) :
+    JointLowerChainRuleAt n x y := by
+  exact logLe_of_scale_le
+    (jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_and_header_of_leftProjection
+      (u := u) (x := x) (y := y) (c := c) (d := d) (e := e)
+      hu hcount hheader)
+    hscale
 
 /-- Standard SoI consequence from lower chain rule, swap invariance, and upper chain rule. -/
 theorem symmetricInformationBound_of_jointRulesAt {n : Nat} {x y : Program}
