@@ -145,6 +145,124 @@ theorem jointUpperInterpreter_isJointUpperInterpreter :
     jointUpperSecondCodeNat, jointUpperSecondResidualNat, jointUpperDecoded, JointUpperPayload,
     toNatExact_packedInput, hf', hg']
 
+/-- Specification of a fixed interpreter that runs two stored descriptions in sequence and
+returns only the second-stage output. -/
+def IsPostComposeInterpreter (u : Program) : Prop :=
+  ∀ f s g r x y : Program,
+    runs f (packedInput [] s) x →
+      runs g (packedInput x r) y →
+        runs u (packedInput [] (JointUpperPayload s f r g)) y
+
+private theorem evalPostCompose_partrec :
+    Nat.Partrec fun n =>
+      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+          (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
+        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+            (Nat.pair xNat (jointUpperSecondResidualNat n)) := by
+  have hFirstCode : Computable fun n => Denumerable.ofNat Code (jointUpperFirstCodeNat n) := by
+    exact (Computable.ofNat Code).comp jointUpperFirstCodeNat_computable
+  have hFirstInput : Computable fun n => Nat.pair 0 (jointUpperResidualNat n) := by
+    exact (Primrec₂.natPair.to_comp).comp (Computable.const 0) jointUpperResidualNat_computable
+  have hEval₁ : _root_.Partrec fun n =>
+      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+        (Nat.pair 0 (jointUpperResidualNat n)) := by
+    exact Code.eval_part.comp hFirstCode hFirstInput
+  have hSecondCode : Computable fun p : Nat × Nat =>
+      Denumerable.ofNat Code (jointUpperSecondCodeNat p.1) := by
+    exact (Computable.ofNat Code).comp (jointUpperSecondCodeNat_computable.comp Computable.fst)
+  have hSecondInput : Computable fun p : Nat × Nat =>
+      Nat.pair p.2 (jointUpperSecondResidualNat p.1) := by
+    exact (Primrec₂.natPair.to_comp).comp Computable.snd
+      (jointUpperSecondResidualNat_computable.comp Computable.fst)
+  have hEval₂ : _root_.Partrec fun p : Nat × Nat =>
+      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat p.1))
+        (Nat.pair p.2 (jointUpperSecondResidualNat p.1)) := by
+    exact Code.eval_part.comp hSecondCode hSecondInput
+  have hStep : _root_.Partrec₂ fun n xNat =>
+      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        (Nat.pair xNat (jointUpperSecondResidualNat n)) := by
+    simpa using hEval₂.to₂
+  exact _root_.Partrec.nat_iff.1 (hEval₁.bind hStep)
+
+theorem exists_postComposeInterpreterCode :
+    ∃ c : Code, ∀ n : Nat,
+      Code.eval c n =
+        Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+            (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
+          Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+              (Nat.pair xNat (jointUpperSecondResidualNat n)) := by
+  obtain ⟨c, hc⟩ := Code.exists_code.1 evalPostCompose_partrec
+  exact ⟨c, fun n => by simpa using congrFun hc n⟩
+
+/-- Fixed interpreter used for postcomposition inside the swap-invariance proof. -/
+noncomputable def postComposeInterpreterCode : Code :=
+  Classical.choose exists_postComposeInterpreterCode
+
+theorem eval_postComposeInterpreterCode (n : Nat) :
+    Code.eval postComposeInterpreterCode n =
+      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+          (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
+        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+            (Nat.pair xNat (jointUpperSecondResidualNat n)) :=
+  Classical.choose_spec exists_postComposeInterpreterCode n
+
+/-- Concrete interpreter that decodes `JointUpperPayload`, executes the two stored descriptions in
+sequence, and returns the second-stage output. -/
+noncomputable def postComposeInterpreter : Program :=
+  codeToProgram postComposeInterpreterCode
+
+theorem postComposeInterpreter_isPostComposeInterpreter :
+    IsPostComposeInterpreter postComposeInterpreter := by
+  intro f s g r x y hf hg
+  have hf' :
+      Code.eval (Denumerable.ofNat Code (BitString.toNatExact f))
+          (Nat.pair 0 (BitString.toNatExact s)) =
+        Part.some (BitString.toNatExact x) := by
+    simpa [runs, programToCode, toNatExact_packedInput] using hf
+  have hg' :
+      Code.eval (Denumerable.ofNat Code (BitString.toNatExact g))
+          (Nat.pair (BitString.toNatExact x) (BitString.toNatExact r)) =
+        Part.some (BitString.toNatExact y) := by
+    simpa [runs, programToCode, toNatExact_packedInput] using hg
+  rw [postComposeInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
+  simp [eval_postComposeInterpreterCode, jointUpperFirstCodeNat, jointUpperResidualNat,
+    jointUpperSecondCodeNat, jointUpperSecondResidualNat, jointUpperDecoded, JointUpperPayload,
+    hf', hg']
+
+/-- Plain code that swaps the two components of a packed pair. -/
+def swapPackedCode : Code :=
+  Code.pair Code.right Code.left
+
+/-- Plain code that extracts the left component of an outer packed input and then swaps the
+two components of that inner packed pair. -/
+def swapJointCode : Code :=
+  Code.comp swapPackedCode Code.left
+
+/-- Fixed program used to turn a description of `⟨x, y⟩` into one of `⟨y, x⟩`. -/
+noncomputable def swapJoint : Program :=
+  codeToProgram swapJointCode
+
+/-- Length of the fixed prefix program used for the swap post-processing step. -/
+noncomputable def swapJointPrefixLength : Nat :=
+  BitString.blen (BitString.pair swapJoint (BitString.e2 []))
+
+@[simp] theorem runs_swapJoint_iff (x y : Program) :
+    runs swapJoint (packedInput (packedInput x y) []) (packedInput y x) := by
+  rw [swapJoint, runs_codeToProgram_iff]
+  rw [toNatExact_packedInput, toNatExact_packedInput]
+  have h :
+      Code.eval swapJointCode (Nat.pair (Nat.pair (BitString.toNatExact x) (BitString.toNatExact y)) 0) =
+        Part.some (Nat.pair (BitString.toNatExact y) (BitString.toNatExact x)) := by
+    simp [Seq.seq, Part.bind, Part.assert, (· <$> ·), swapJointCode, swapPackedCode,
+      Nat.Partrec.Code.eval]
+    apply Part.ext'
+    · constructor
+      · intro _; trivial
+      · intro _; exact ⟨trivial, trivial, trivial⟩
+    · intro _ _
+      rfl
+  simpa using h
+
 /-- Upper chain-rule component for joint prefix complexity at scale `n`. -/
 def JointUpperChainRuleAt (n : Nat) (x y : Program) : Prop :=
   LogLe (JointComplexity x y)

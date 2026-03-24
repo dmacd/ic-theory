@@ -108,6 +108,24 @@ example :
   · exact (runs_const_iff 7 (packedInput (ofNatExact 5) []) (ofNatExact 7)).2 rfl
 
 example :
+    runs postComposeInterpreter
+      (packedInput []
+        (JointUpperPayload []
+          (codeToProgram (Nat.Partrec.Code.const 5))
+          []
+          (codeToProgram (Nat.Partrec.Code.const 7))))
+      (ofNatExact 7) := by
+  apply postComposeInterpreter_isPostComposeInterpreter
+  · exact (runs_const_iff 5 (packedInput [] []) (ofNatExact 5)).2 rfl
+  · exact (runs_const_iff 7 (packedInput (ofNatExact 5) []) (ofNatExact 7)).2 rfl
+
+example :
+    runs swapJoint
+      (packedInput (packedInput (ofNatExact 5) (ofNatExact 7)) [])
+      (packedInput (ofNatExact 7) (ofNatExact 5)) := by
+  simpa using runs_swapJoint_iff (ofNatExact 5) (ofNatExact 7)
+
+example :
     PrefixConditionalComplexity (ofNatExact 5) (codeToProgram (Nat.Partrec.Code.const 5)) ≤
       residualPrefixOverhead [] := by
   simpa using

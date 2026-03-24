@@ -26,6 +26,12 @@ theorem logPenalty_mono {m n : Nat} (h : m ≤ n) : logPenalty m ≤ logPenalty 
   rw [Nat.log2_eq_log_two, Nat.log2_eq_log_two]
   exact Nat.log_mono_right (Nat.succ_le_succ h)
 
+theorem logPenalty_le_self (n : Nat) : logPenalty n ≤ n := by
+  unfold logPenalty
+  exact Nat.le_of_lt_succ (by
+    rw [Nat.log2_eq_log_two]
+    exact Nat.log_lt_of_lt_pow (Nat.succ_ne_zero n) (show n + 1 < 2 ^ (n + 1) from Nat.lt_two_pow_self))
+
 theorem logLe_of_le {a b n : Nat} (h : a ≤ b) : LogLe a b n := by
   refine ⟨0, 0, ?_⟩
   simpa [LogLe, logPenalty] using h
@@ -87,12 +93,46 @@ theorem logPenalty_four_mul_add_three (n : Nat) :
     rw [Nat.log_mul_base Nat.one_lt_two (Nat.succ_ne_zero _)]
   rw [h1, h2]
 
+theorem logPenalty_twoPow_mul_succ_sub_one (n k : Nat) :
+    logPenalty ((n + 1) * 2 ^ k - 1) = logPenalty n + k := by
+  induction k with
+  | zero =>
+      simp [logPenalty]
+  | succ k ih =>
+      have hne : (n + 1) * 2 ^ k ≠ 0 := by
+        exact Nat.mul_ne_zero (Nat.succ_ne_zero _) (pow_ne_zero _ (by decide))
+      have hpos' : 0 < (n + 1) * 2 ^ k := by
+        exact Nat.mul_pos (Nat.succ_pos _) (pow_pos (by decide) _)
+      have hpos : 0 < ((n + 1) * 2 ^ k) * 2 := by
+        exact Nat.mul_pos hpos' (by decide)
+      unfold logPenalty
+      rw [Nat.log2_eq_log_two]
+      rw [show ((n + 1) * 2 ^ (k + 1) - 1) + 1 = ((n + 1) * 2 ^ k) * 2 by
+        rw [pow_succ]
+        rw [Nat.mul_assoc]
+        simpa [Nat.mul_assoc] using Nat.sub_add_cancel (Nat.succ_le_of_lt hpos)]
+      rw [Nat.log_mul_base Nat.one_lt_two hne]
+      have hadd : ((n + 1) * 2 ^ k - 1) + 1 = (n + 1) * 2 ^ k := by
+        exact Nat.sub_add_cancel (Nat.succ_le_of_lt hpos')
+      have hlogk : Nat.log 2 ((n + 1) * 2 ^ k) = logPenalty ((n + 1) * 2 ^ k - 1) := by
+        rw [logPenalty, Nat.log2_eq_log_two, hadd]
+      rw [hlogk]
+      simpa [Nat.add_assoc] using congrArg Nat.succ ih
+
 theorem blen_ofNat_le_logPenalty_add_three_of_le_four_mul_add_three {m n : Nat}
     (h : m ≤ 4 * n + 3) :
     BitString.blen (BitString.ofNat m) ≤ logPenalty n + 3 := by
   have hlog : logPenalty m ≤ logPenalty (4 * n + 3) := logPenalty_mono h
   have hsize := blen_ofNat_le_logPenalty_succ m
   rw [logPenalty_four_mul_add_three] at hlog
+  omega
+
+theorem blen_ofNat_le_logPenalty_add_of_le_twoPow_mul_succ_sub_one {m n k : Nat}
+    (h : m ≤ (n + 1) * 2 ^ k - 1) :
+    BitString.blen (BitString.ofNat m) ≤ logPenalty n + k + 1 := by
+  have hlog : logPenalty m ≤ logPenalty ((n + 1) * 2 ^ k - 1) := logPenalty_mono h
+  have hsize := blen_ofNat_le_logPenalty_succ m
+  rw [logPenalty_twoPow_mul_succ_sub_one] at hlog
   omega
 
 end IcTheory
