@@ -258,6 +258,24 @@ private theorem blen_ofNat_jointRightPayload_le_of_index_lt {n i : Nat}
   exact blen_ofNat_le_logPenalty_add_of_le_twoPow_mul_succ_sub_one
     (n := n) (k := 3) (by omega : BitString.blen (jointRightPayload n i) ≤ (n + 1) * 2 ^ 3 - 1)
 
+private theorem blen_jointRightPayload_le_of_index_lt_pow {n i m : Nat}
+    (hi : i < 2 ^ m) :
+    BitString.blen (jointRightPayload n i) ≤ m + 3 * logPenalty n + 4 := by
+  have hn :
+      BitString.blen (BitString.ofNatExact n) ≤ logPenalty n + 1 := by
+    exact le_trans (BitString.blen_ofNatExact_le_ofNat n) (blen_ofNat_le_logPenalty_succ n)
+  have hiBits :
+      BitString.blen (BitString.ofNatExact i) ≤ m := by
+    exact le_trans (BitString.blen_ofNatExact_le_size i) ((Nat.size_le).2 hi)
+  have hheader :
+      BitString.blen (BitString.ofNatExact (BitString.blen (BitString.ofNatExact n))) ≤
+        logPenalty n + 1 := by
+    exact le_trans
+      (BitString.blen_ofNatExact_le_size _)
+      (le_trans ((Nat.size_le).2 (BitString.blen (BitString.ofNatExact n)).lt_two_pow_self) hn)
+  rw [jointRightPayload, BitString.blen_exactPairPayload]
+  omega
+
 /-- A bounded enumerator turns a joint-complexity bound into an indexed conditional description
 of `y` from `x`. This is the machine-facing enumeration lemma behind the lower-chain argument. -/
 theorem prefixConditionalComplexity_logLe_of_jointRightEnumerator {u x y : Program} {n : Nat}
@@ -295,6 +313,71 @@ theorem prefixConditionalComplexity_logLe_of_jointRightEnumerator {u x y : Progr
     rw [hpShape']
     omega
   exact ⟨5, 2 * BitString.blen u + 15, le_trans hcond hp⟩
+
+/-- Exact index-to-description bound for the fixed-`x` candidate family. -/
+theorem prefixConditionalComplexity_le_of_jointRightEnumerator_of_indexPow
+    {u x y : Program} {n i m : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hget : (jointRightOutputsUpToLength x n)[i]? = some y)
+    (hi : i < 2 ^ m) :
+    PrefixConditionalComplexity y x ≤
+      m + 3 * logPenalty n +
+        2 * BitString.blen (BitString.ofNat (m + 3 * logPenalty n + 4)) +
+        (2 * BitString.blen u + 6) := by
+  let payload : Program := jointRightPayload n i
+  let p : Program := BitString.pair u (BitString.e2 payload)
+  have hpRuns : PrefixRuns p x y := by
+    refine ⟨u, payload, rfl, ?_⟩
+    simpa [payload] using hu x n i y hget
+  have hcond : PrefixConditionalComplexity y x ≤ BitString.blen p := by
+    exact prefixConditionalComplexity_le_length hpRuns
+  have hpayload :
+      BitString.blen payload ≤ m + 3 * logPenalty n + 4 :=
+    blen_jointRightPayload_le_of_index_lt_pow hi
+  have hlogPayload :
+      BitString.blen (BitString.ofNat (BitString.blen payload)) ≤
+        BitString.blen (BitString.ofNat (m + 3 * logPenalty n + 4)) := by
+    exact BitString.blen_ofNat_mono hpayload
+  have hp :
+      BitString.blen p ≤
+        m + 3 * logPenalty n +
+          2 * BitString.blen (BitString.ofNat (m + 3 * logPenalty n + 4)) +
+          (2 * BitString.blen u + 6) := by
+    have hpShape :
+        BitString.blen p =
+          2 * BitString.blen u + BitString.blen payload +
+            2 * BitString.blen (BitString.ofNat (BitString.blen payload)) + 2 := by
+      have hpShape0 :
+          BitString.blen p =
+            1 + (1 + (2 * BitString.blen u +
+              (BitString.blen payload +
+                2 * BitString.blen (BitString.ofNat (BitString.blen payload))))) := by
+        simp [p, BitString.blen_pair, BitString.blen_e2, Nat.add_comm, Nat.add_left_comm]
+      omega
+    rw [hpShape]
+    omega
+  exact le_trans hcond hp
+
+/-- Exact count-to-description bound for the fixed-`x` candidate family. -/
+theorem prefixConditionalComplexity_le_of_jointRightEnumerator_of_count
+    {u x y : Program} {n c d : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount :
+      (jointRightOutputsUpToLength x n).length ≤ 2 ^ (n + c * logPenalty n + d - PrefixComplexity x))
+    (hxy : JointComplexity x y ≤ n) :
+    PrefixConditionalComplexity y x ≤
+      (n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n +
+        2 * BitString.blen
+          (BitString.ofNat
+            ((n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4)) +
+        (2 * BitString.blen u + 6) := by
+  obtain ⟨i, _, hget⟩ := exists_jointRightIndex_of_jointComplexity_le (x := x) (y := y) hxy
+  have hi' : i < (jointRightOutputsUpToLength x n).length := by
+    exact (List.getElem?_eq_some_iff.mp hget).1
+  have hiPow :
+      i < 2 ^ (n + c * logPenalty n + d - PrefixComplexity x) := by
+    exact lt_of_lt_of_le hi' hcount
+  exact prefixConditionalComplexity_le_of_jointRightEnumerator_of_indexPow hu hget hiPow
 
 end UniversalMachine
 
