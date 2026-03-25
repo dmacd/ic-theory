@@ -514,6 +514,16 @@ def JointRightCountBoundAt (n : Nat) (x _y : Program) : Prop :=
   ∃ c d : Nat,
     (jointRightOutputsUpToLength x n).length ≤ 2 ^ (n + c * logPenalty n + d - PrefixComplexity x)
 
+/-- A heavy-left enumerator gives the sharp fixed-`x` count bound with explicit logarithmic
+slack, so the lower-chain rule no longer needs the count theorem as a separate hypothesis. -/
+theorem jointRightCountBoundAt_of_jointLeftCountEnumerator {u x y : Program} {n : Nat}
+    (hu : IsJointLeftCountEnumerator u) :
+    JointRightCountBoundAt n x y := by
+  refine ⟨8, 2 * BitString.blen u + 25, ?_⟩
+  simpa using
+    (length_jointRightOutputsUpToLength_le_of_jointLeftCountEnumerator
+      (u := u) (x := x) (n := n) hu)
+
 /-- A fixed enumerator plus a sharp count bound, a logarithmic header bound, and a projection
 bound for `K(x)` give the lower chain rule at the natural scale `K(x, y)`. -/
 theorem jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_and_header

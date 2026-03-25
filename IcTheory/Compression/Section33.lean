@@ -74,6 +74,35 @@ theorem jointRulesAtFeatureScale_of_jointRightCountBound {u f x : Program}
   · exact jointSwapInvariantAt_of_bounds hlowerScale hswapScale
   · exact jointUpperAtFeatureScale hupperScale
 
+/-- Concrete sufficient conditions for the Section 3.3 lower-chain hypothesis using both
+enumerators directly: the right-family enumerator feeds the lower-chain machine argument, and the
+left-family enumerator discharges the sharp count bound. -/
+theorem jointLowerAtFeatureScale_of_jointCountEnumerators {u v f x : Program}
+    (hu : IsJointRightEnumerator u)
+    (hv : IsJointLeftCountEnumerator v)
+    (hscale : JointComplexity x f ≤ BitString.blen x) :
+    JointLowerChainRuleAt (BitString.blen x) x f := by
+  exact jointLowerAtFeatureScale_of_jointRightCountBound
+    (u := u) (f := f) (x := x) hu
+    (jointRightCountBoundAt_of_jointLeftCountEnumerator
+      (u := v) (x := x) (y := f) (n := JointComplexity x f) hv)
+    hscale
+
+/-- Concrete sufficient conditions for the full Section 3.3 joint-rule package using the two
+enumerators directly. -/
+theorem jointRulesAtFeatureScale_of_jointCountEnumerators {u v f x : Program}
+    (hu : IsJointRightEnumerator u)
+    (hv : IsJointLeftCountEnumerator v)
+    (hlowerScale : JointComplexity x f ≤ BitString.blen x)
+    (hswapScale : JointComplexity f x ≤ BitString.blen x)
+    (hupperScale : PrefixComplexity f + PrefixConditionalComplexity x f ≤ BitString.blen x) :
+    JointRulesAtFeatureScale f x := by
+  refine ⟨?_, ?_, ?_⟩
+  · exact jointLowerAtFeatureScale_of_jointCountEnumerators
+      (u := u) (v := v) (f := f) (x := x) hu hv hlowerScale
+  · exact jointSwapInvariantAt_of_bounds hlowerScale hswapScale
+  · exact jointUpperAtFeatureScale hupperScale
+
 /-- Lemma 3.3 reduced to a symmetry-of-information hypothesis over the prefix layer. -/
 theorem lemma33_of_symmetry {f x : Program}
     (hfeature : IsFeature runs f x)
@@ -136,6 +165,21 @@ theorem lemma33_of_jointRightCountBound {u f x : Program}
   exact lemma33_of_jointRules hfeature hinfo
     (jointRulesAtFeatureScale_of_jointRightCountBound
       (u := u) (f := f) (x := x) hu hcount hlowerScale hswapScale hupperScale)
+
+/-- Lemma 3.3 from the two concrete enumeration hypotheses: one for the bounded right family and
+one for the heavy-left family that supplies the sharp count bound. -/
+theorem lemma33_of_jointCountEnumerators {u v f x : Program}
+    (hu : IsJointRightEnumerator u)
+    (hv : IsJointLeftCountEnumerator v)
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x)
+    (hlowerScale : JointComplexity x f ≤ BitString.blen x)
+    (hswapScale : JointComplexity f x ≤ BitString.blen x)
+    (hupperScale : PrefixComplexity f + PrefixConditionalComplexity x f ≤ BitString.blen x) :
+    LogLe (PrefixConditionalComplexity f x) 0 (BitString.blen x) := by
+  exact lemma33_of_jointRules hfeature hinfo
+    (jointRulesAtFeatureScale_of_jointCountEnumerators
+      (u := u) (v := v) (f := f) (x := x) hu hv hlowerScale hswapScale hupperScale)
 
 end
 
