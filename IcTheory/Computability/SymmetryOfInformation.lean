@@ -429,6 +429,57 @@ theorem jointLeftProjectionLogLe (x y : Program) :
       postComposeInterpreter_isPostComposeInterpreter
       (by simpa using runs_leftPacked_iff x y))
 
+private theorem jointRightHeaderBound {x y : Program} {c d : Nat} :
+    BitString.blen
+        (BitString.ofNat
+          ((JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x) +
+            3 * logPenalty (JointComplexity x y) + 4)) ≤
+      logPenalty (JointComplexity x y) + (c + d + 6) := by
+  let n : Nat := JointComplexity x y
+  let m : Nat := (n + c * logPenalty n + d - PrefixComplexity x) + 3 * logPenalty n + 4
+  let a : Nat := 2 ^ (c + d + 5)
+  have ha1 : 1 ≤ a := by
+    dsimp [a]
+    exact Nat.succ_le_of_lt (pow_pos (by decide : 0 < 2) _)
+  have habig : c + d + 5 ≤ a := by
+    dsimp [a]
+    exact Nat.le_of_lt (show c + d + 5 < 2 ^ (c + d + 5) from Nat.lt_two_pow_self)
+  have hac : c + 4 ≤ a := by
+    exact le_trans (by omega) habig
+  have had : d + 5 ≤ a := by
+    exact le_trans (by omega) habig
+  have hconst : d + 4 ≤ a - 1 := by
+    exact Nat.le_sub_one_of_lt (lt_of_lt_of_le (Nat.lt_succ_self (d + 4)) had)
+  have hm : m ≤ (n + 1) * a - 1 := by
+    have hsub : n + c * logPenalty n + d - PrefixComplexity x ≤ n + c * logPenalty n + d := by
+      exact Nat.sub_le _ _
+    have hlog := logPenalty_le_self n
+    have hc : c * logPenalty n ≤ c * n := Nat.mul_le_mul_left c hlog
+    have h3 : 3 * logPenalty n ≤ 3 * n := Nat.mul_le_mul_left 3 hlog
+    calc
+      m ≤ n + c * logPenalty n + d + 3 * logPenalty n + 4 := by
+        dsimp [m]
+        omega
+      _ ≤ n + c * n + d + 3 * n + 4 := by
+        omega
+      _ = c * n + 4 * n + (d + 4) := by
+        omega
+      _ = (c + 4) * n + (d + 4) := by
+        rw [Nat.add_mul]
+      _ ≤ a * n + (a - 1) := by
+        have hmul : (c + 4) * n ≤ a * n := Nat.mul_le_mul_right n hac
+        exact Nat.add_le_add hmul hconst
+      _ = (n + 1) * a - 1 := by
+        calc
+          a * n + (a - 1) = a * n + a - 1 := by rw [Nat.add_sub_assoc ha1]
+          _ = n * a + a - 1 := by rw [Nat.mul_comm]
+          _ = (n + 1) * a - 1 := by rw [Nat.add_mul, one_mul]
+  have hblen :=
+    blen_ofNat_le_logPenalty_add_of_le_twoPow_mul_succ_sub_one
+      (m := m) (n := n) (k := c + d + 5) hm
+  dsimp [m, n] at hblen ⊢
+  omega
+
 /-- Upper chain-rule component for joint prefix complexity at scale `n`. -/
 def JointUpperChainRuleAt (n : Nat) (x y : Program) : Prop :=
   LogLe (JointComplexity x y)
@@ -459,7 +510,7 @@ theorem jointSwapInvariantAt_of_bounds {x y : Program} {n : Nat}
   exact logEq_of_scale_le (jointSwapInvariantAt_max x y) (max_le_iff.mpr ⟨hxy, hyx⟩)
 
 /-- Count-bound assumption for the fixed-`x` candidate family underlying the lower chain rule. -/
-def JointRightCountBoundAt (n : Nat) (x y : Program) : Prop :=
+def JointRightCountBoundAt (n : Nat) (x _y : Program) : Prop :=
   ∃ c d : Nat,
     (jointRightOutputsUpToLength x n).length ≤ 2 ^ (n + c * logPenalty n + d - PrefixComplexity x)
 
@@ -612,6 +663,54 @@ theorem jointLowerChainRuleAt_of_jointRightEnumerator_of_count_and_header_of_lef
     (jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_and_header_of_leftProjection
       (u := u) (x := x) (y := y) (c := c) (d := d) (e := e)
       hu hcount hheader)
+    hscale
+
+/-- The generic header bound is automatic, so only the sharp fixed-`x` count bound remains as
+an extra lower-chain hypothesis once left projection is available. -/
+theorem jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_of_leftProjection
+    {u x y : Program} {c d : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount :
+      (jointRightOutputsUpToLength x (JointComplexity x y)).length ≤
+        2 ^ (JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x)) :
+    JointLowerChainRuleAt (JointComplexity x y) x y := by
+  exact
+    jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_and_header_of_leftProjection
+      (u := u) (x := x) (y := y) (c := c) (d := d) (e := c + d + 6)
+      hu hcount jointRightHeaderBound
+
+theorem jointLowerChainRuleAt_of_jointRightEnumerator_of_count_of_leftProjection_of_scale_le
+    {u x y : Program} {n c d : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount :
+      (jointRightOutputsUpToLength x (JointComplexity x y)).length ≤
+        2 ^ (JointComplexity x y + c * logPenalty (JointComplexity x y) + d - PrefixComplexity x))
+    (hscale : JointComplexity x y ≤ n) :
+    JointLowerChainRuleAt n x y := by
+  exact logLe_of_scale_le
+    (jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_of_leftProjection
+      (u := u) (x := x) (y := y) (c := c) (d := d) hu hcount)
+    hscale
+
+theorem jointLowerChainRuleAt_complexityScale_of_jointRightCountBoundAt_of_leftProjection
+    {u x y : Program}
+    (hu : IsJointRightEnumerator u)
+    (hcount : JointRightCountBoundAt (JointComplexity x y) x y) :
+    JointLowerChainRuleAt (JointComplexity x y) x y := by
+  rcases hcount with ⟨c, d, hcount⟩
+  exact
+    jointLowerChainRuleAt_complexityScale_of_jointRightEnumerator_of_count_of_leftProjection
+      (u := u) (x := x) (y := y) (c := c) (d := d) hu hcount
+
+theorem jointLowerChainRuleAt_of_jointRightCountBoundAt_of_leftProjection_of_scale_le
+    {u x y : Program} {n : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount : JointRightCountBoundAt (JointComplexity x y) x y)
+    (hscale : JointComplexity x y ≤ n) :
+    JointLowerChainRuleAt n x y := by
+  exact logLe_of_scale_le
+    (jointLowerChainRuleAt_complexityScale_of_jointRightCountBoundAt_of_leftProjection
+      (u := u) (x := x) (y := y) hu hcount)
     hscale
 
 /-- Standard SoI consequence from lower chain rule, swap invariance, and upper chain rule. -/

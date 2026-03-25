@@ -50,6 +50,30 @@ theorem jointUpperAtFeatureScale {f x : Program}
     JointUpperChainRuleAt (BitString.blen x) f x := by
   exact jointUpperAtFeatureScale_of_interpreter jointUpperInterpreter_isJointUpperInterpreter hscale
 
+/-- The Section 3.3 lower-chain hypothesis from a sharp fixed-`x` count bound at the natural
+joint-complexity scale. The projection and header terms are now handled internally. -/
+theorem jointLowerAtFeatureScale_of_jointRightCountBound {u f x : Program}
+    (hu : IsJointRightEnumerator u)
+    (hcount : JointRightCountBoundAt (JointComplexity x f) x f)
+    (hscale : JointComplexity x f ≤ BitString.blen x) :
+    JointLowerChainRuleAt (BitString.blen x) x f := by
+  exact jointLowerChainRuleAt_of_jointRightCountBoundAt_of_leftProjection_of_scale_le
+    (u := u) (x := x) (y := f) hu hcount hscale
+
+/-- Concrete sufficient conditions for the full Section 3.3 joint-rule package. -/
+theorem jointRulesAtFeatureScale_of_jointRightCountBound {u f x : Program}
+    (hu : IsJointRightEnumerator u)
+    (hcount : JointRightCountBoundAt (JointComplexity x f) x f)
+    (hlowerScale : JointComplexity x f ≤ BitString.blen x)
+    (hswapScale : JointComplexity f x ≤ BitString.blen x)
+    (hupperScale : PrefixComplexity f + PrefixConditionalComplexity x f ≤ BitString.blen x) :
+    JointRulesAtFeatureScale f x := by
+  refine ⟨?_, ?_, ?_⟩
+  · exact jointLowerAtFeatureScale_of_jointRightCountBound (u := u) (f := f) (x := x)
+      hu hcount hlowerScale
+  · exact jointSwapInvariantAt_of_bounds hlowerScale hswapScale
+  · exact jointUpperAtFeatureScale hupperScale
+
 /-- Lemma 3.3 reduced to a symmetry-of-information hypothesis over the prefix layer. -/
 theorem lemma33_of_symmetry {f x : Program}
     (hfeature : IsFeature runs f x)
@@ -97,6 +121,21 @@ theorem lemma33_of_jointRules {f x : Program}
     (hjoint : JointRulesAtFeatureScale f x) :
     LogLe (PrefixConditionalComplexity f x) 0 (BitString.blen x) := by
   exact lemma33_of_symmetry hfeature hinfo (symmetricInformationBound_of_jointRules hjoint)
+
+/-- Lemma 3.3 from the current concrete SoI decomposition: a sharp fixed-`x` count bound plus
+the two natural scale bounds are enough. -/
+theorem lemma33_of_jointRightCountBound {u f x : Program}
+    (hu : IsJointRightEnumerator u)
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x)
+    (hcount : JointRightCountBoundAt (JointComplexity x f) x f)
+    (hlowerScale : JointComplexity x f ≤ BitString.blen x)
+    (hswapScale : JointComplexity f x ≤ BitString.blen x)
+    (hupperScale : PrefixComplexity f + PrefixConditionalComplexity x f ≤ BitString.blen x) :
+    LogLe (PrefixConditionalComplexity f x) 0 (BitString.blen x) := by
+  exact lemma33_of_jointRules hfeature hinfo
+    (jointRulesAtFeatureScale_of_jointRightCountBound
+      (u := u) (f := f) (x := x) hu hcount hlowerScale hswapScale hupperScale)
 
 end
 
