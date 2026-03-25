@@ -1,4 +1,5 @@
 import IcTheory.Computability.PrefixInformation
+import Mathlib.Data.List.Dedup
 import Mathlib.Data.List.ReduceOption
 import Mathlib.Tactic
 
@@ -117,7 +118,7 @@ theorem prefixRuns_of_prefixOutput_eq_some {p input output : Program}
 /-- Finite list of all outputs produced from `input` by prefix descriptions of length at most
 `n`. -/
 noncomputable def prefixOutputsUpToLength (input : Program) (n : Nat) : List Program :=
-  (BitString.allUpToLength n).filterMap fun p => prefixOutput p input
+  ((BitString.allUpToLength n).filterMap fun p => prefixOutput p input).dedup
 
 private theorem length_filterMap_le {α β : Type} (f : α → Option β) :
     ∀ l : List α, (l.filterMap f).length ≤ l.length
@@ -134,15 +135,19 @@ theorem mem_prefixOutputsUpToLength_of_prefixRuns {p input output : Program} {n 
     (hp : PrefixRuns p input output) :
     output ∈ prefixOutputsUpToLength input n := by
   unfold prefixOutputsUpToLength
-  rw [List.mem_filterMap]
+  rw [List.mem_dedup, List.mem_filterMap]
   exact ⟨p, by simpa using (BitString.mem_allUpToLength_iff.mpr hlen), by simpa using hp⟩
 
 theorem length_prefixOutputsUpToLength_le (input : Program) (n : Nat) :
     (prefixOutputsUpToLength input n).length ≤ 2 ^ (n + 1) - 1 := by
   unfold prefixOutputsUpToLength
-  exact le_trans
-    (length_filterMap_le (fun p => prefixOutput p input) (BitString.allUpToLength n))
-    (by simp)
+  calc
+    ((BitString.allUpToLength n).filterMap fun p => prefixOutput p input).dedup.length ≤
+        ((BitString.allUpToLength n).filterMap fun p => prefixOutput p input).length := by
+      exact List.Sublist.length_le (List.dedup_sublist _)
+    _ ≤ (BitString.allUpToLength n).length := by
+      exact length_filterMap_le (fun p => prefixOutput p input) (BitString.allUpToLength n)
+    _ = 2 ^ (n + 1) - 1 := by simp
 
 theorem mem_prefixOutputsUpToLength_of_prefixConditionalComplexity_le {x input : Program} {n : Nat}
     (hx : PrefixConditionalComplexity x input ≤ n) :
@@ -176,28 +181,39 @@ def unpackInput (z : Program) : Program × Program :=
 /-- For fixed left component `x`, this is the finite family of right components appearing in
 joint descriptions of complexity at most `n`. -/
 noncomputable def jointRightOutputsUpToLength (x : Program) (n : Nat) : List Program :=
-  (prefixOutputsUpToLength [] n).filterMap fun z =>
+  ((prefixOutputsUpToLength [] n).filterMap fun z =>
     let w := unpackInput z
-    if w.1 = x then some w.2 else none
+    if w.1 = x then some w.2 else none).dedup
 
 theorem mem_jointRightOutputsUpToLength_of_jointComplexity_le {x y : Program} {n : Nat}
     (hxy : JointComplexity x y ≤ n) :
     y ∈ jointRightOutputsUpToLength x n := by
   unfold jointRightOutputsUpToLength
-  rw [List.mem_filterMap]
+  rw [List.mem_dedup, List.mem_filterMap]
   refine ⟨packedInput x y, mem_prefixOutputsUpToLength_of_jointComplexity_le hxy, ?_⟩
   simp
 
 theorem length_jointRightOutputsUpToLength_le (x : Program) (n : Nat) :
     (jointRightOutputsUpToLength x n).length ≤ 2 ^ (n + 1) - 1 := by
   unfold jointRightOutputsUpToLength
-  exact le_trans
-    (length_filterMap_le
-      (fun z =>
-        let w := unpackInput z
-        if w.1 = x then some w.2 else none)
-      (prefixOutputsUpToLength [] n))
-    (length_prefixOutputsUpToLength_le [] n)
+  calc
+    ((prefixOutputsUpToLength [] n).filterMap
+        (fun z =>
+          let w := unpackInput z
+          if w.1 = x then some w.2 else none)).dedup.length ≤
+        ((prefixOutputsUpToLength [] n).filterMap
+          (fun z =>
+            let w := unpackInput z
+            if w.1 = x then some w.2 else none)).length := by
+      exact List.Sublist.length_le (List.dedup_sublist _)
+    _ ≤ (prefixOutputsUpToLength [] n).length := by
+      exact length_filterMap_le
+        (fun z =>
+          let w := unpackInput z
+          if w.1 = x then some w.2 else none)
+        (prefixOutputsUpToLength [] n)
+    _ ≤ 2 ^ (n + 1) - 1 := by
+      exact length_prefixOutputsUpToLength_le [] n
 
 theorem exists_jointRightIndex_of_jointComplexity_le {x y : Program} {n : Nat}
     (hxy : JointComplexity x y ≤ n) :
