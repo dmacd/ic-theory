@@ -116,6 +116,36 @@ theorem prefixRuns_of_prefixOutput_eq_some {p input output : Program}
   · exact prefixRuns_of_prefixOutput_eq_some
   · exact prefixOutput_eq_some_of_prefixRuns
 
+/-- Bounded evaluation of a plain program at fuel `k`, returning an exact bitstring output when
+the evaluator succeeds within that bound. -/
+def prefixOutputAtFuel (k : Nat) (p input : Program) : Option Program :=
+  (Nat.Partrec.Code.evaln k (programToCode p) (BitString.toNatExact input)).map BitString.ofNatExact
+
+theorem prefixOutputAtFuel_sound {k : Nat} {p input output : Program}
+    (h : prefixOutputAtFuel k p input = some output) :
+    runs p input output := by
+  rw [prefixOutputAtFuel, Option.map_eq_some_iff] at h
+  rcases h with ⟨outputNat, hout, rfl⟩
+  have hEval :
+      outputNat ∈ Nat.Partrec.Code.eval (programToCode p) (BitString.toNatExact input) :=
+    Nat.Partrec.Code.evaln_sound hout
+  have hEq :
+      Nat.Partrec.Code.eval (programToCode p) (BitString.toNatExact input) = Part.some outputNat :=
+    Part.eq_some_iff.2 hEval
+  simpa [runs] using hEq
+
+theorem prefixOutputAtFuel_complete {p input output : Program}
+    (h : runs p input output) :
+    ∃ k, prefixOutputAtFuel k p input = some output := by
+  have hEval :
+      BitString.toNatExact output ∈
+        Nat.Partrec.Code.eval (programToCode p) (BitString.toNatExact input) := by
+    exact Part.eq_some_iff.1 (by simpa [runs] using h)
+  rcases (Nat.Partrec.Code.evaln_complete.mp hEval) with ⟨k, hk⟩
+  refine ⟨k, ?_⟩
+  rw [prefixOutputAtFuel, Option.map_eq_some_iff]
+  exact ⟨BitString.toNatExact output, hk, by simp⟩
+
 /-- Finite list of all outputs produced from `input` by prefix descriptions of length at most
 `n`. -/
 noncomputable def prefixOutputsUpToLength (input : Program) (n : Nat) : List Program :=
@@ -155,6 +185,67 @@ theorem length_prefixOutputsUpToLength_le (input : Program) (n : Nat) :
       exact length_filterMap_le (fun p => prefixOutput p input) (BitString.allUpToLength n)
     _ = 2 ^ (n + 1) - 1 := by simp
 
+/-- Finite witness family for prefix descriptions of length at most `n`, exposed as
+interpreter/payload pairs. This is the machine-facing search space for later dovetailing
+arguments. -/
+def prefixWitnessPairsUpToLength (n : Nat) : List (Program × Program) :=
+  (BitString.allUpToLength n).flatMap fun f =>
+    (BitString.allUpToLength n).filterMap fun s =>
+      if BitString.blen (BitString.pair f (BitString.e2 s)) ≤ n then some (f, s) else none
+
+theorem mem_prefixWitnessPairsUpToLength_iff {f s : Program} {n : Nat} :
+    (f, s) ∈ prefixWitnessPairsUpToLength n ↔
+      BitString.blen (BitString.pair f (BitString.e2 s)) ≤ n := by
+  constructor
+  · intro h
+    unfold prefixWitnessPairsUpToLength at h
+    rw [List.mem_flatMap] at h
+    rcases h with ⟨f', hf', hs⟩
+    rw [List.mem_filterMap] at hs
+    rcases hs with ⟨s', hs', hfs⟩
+    split_ifs at hfs with hlen
+    · rcases hfs with ⟨rfl, rfl⟩
+      exact hlen
+  · intro hlen
+    unfold prefixWitnessPairsUpToLength
+    rw [List.mem_flatMap]
+    refine ⟨f, ?_, ?_⟩
+    · exact (BitString.mem_allUpToLength_iff.mpr (by
+        have hf : BitString.blen f ≤ BitString.blen (BitString.pair f (BitString.e2 s)) := by
+          simp [BitString.blen_pair]
+          omega
+        exact le_trans hf hlen))
+    · rw [List.mem_filterMap]
+      refine ⟨s, ?_, ?_⟩
+      · exact (BitString.mem_allUpToLength_iff.mpr (by
+          have hs : BitString.blen s ≤ BitString.blen (BitString.pair f (BitString.e2 s)) := by
+            simp [BitString.blen_pair, BitString.blen_e2]
+            omega
+          exact le_trans hs hlen))
+      · rw [if_pos hlen]
+
+theorem mem_prefixOutputsUpToLength_iff_existsWitness {x input : Program} {n : Nat} :
+    x ∈ prefixOutputsUpToLength input n ↔
+      ∃ f s, (f, s) ∈ prefixWitnessPairsUpToLength n ∧ runs f (packedInput input s) x := by
+  constructor
+  · intro hx
+    unfold prefixOutputsUpToLength at hx
+    rw [List.mem_dedup, List.mem_filterMap] at hx
+    rcases hx with ⟨p, hpLen, hpo⟩
+    have hpRuns : PrefixRuns p input x := (prefixOutput_eq_some_iff.mp hpo)
+    rcases hpRuns with ⟨f, s, hpEq, hrun⟩
+    refine ⟨f, s, ?_, hrun⟩
+    rw [mem_prefixWitnessPairsUpToLength_iff]
+    rw [← hpEq]
+    exact (BitString.mem_allUpToLength_iff.mp hpLen)
+  · rintro ⟨f, s, hfs, hrun⟩
+    exact mem_prefixOutputsUpToLength_of_prefixRuns
+      (input := input) (n := n)
+      (p := BitString.pair f (BitString.e2 s))
+      (output := x)
+      (mem_prefixWitnessPairsUpToLength_iff.mp hfs)
+      ⟨f, s, rfl, hrun⟩
+
 theorem mem_prefixOutputsUpToLength_of_prefixConditionalComplexity_le {x input : Program} {n : Nat}
     (hx : PrefixConditionalComplexity x input ≤ n) :
     x ∈ prefixOutputsUpToLength input n := by
@@ -174,6 +265,27 @@ theorem mem_prefixOutputsUpToLength_of_jointComplexity_le {x y : Program} {n : N
     packedInput x y ∈ prefixOutputsUpToLength [] n := by
   simpa [JointComplexity] using
     (mem_prefixOutputsUpToLength_of_prefixComplexity_le (x := packedInput x y) hxy)
+
+theorem jointComplexity_le_iff_existsWitness {x y : Program} {n : Nat} :
+    JointComplexity x y ≤ n ↔
+      ∃ f s, (f, s) ∈ prefixWitnessPairsUpToLength n ∧
+        runs f (packedInput [] s) (packedInput x y) := by
+  constructor
+  · intro hxy
+    exact (mem_prefixOutputsUpToLength_iff_existsWitness
+      (x := packedInput x y) (input := ([] : Program)) (n := n)).mp
+      (mem_prefixOutputsUpToLength_of_jointComplexity_le hxy)
+  · rintro ⟨f, s, hfs, hrun⟩
+    have hpRuns :
+        PrefixRuns (BitString.pair f (BitString.e2 s)) [] (packedInput x y) := by
+      exact ⟨f, s, rfl, hrun⟩
+    have hpLen : BitString.blen (BitString.pair f (BitString.e2 s)) ≤ n :=
+      mem_prefixWitnessPairsUpToLength_iff.mp hfs
+    have hPrefix :
+        PrefixComplexity (packedInput x y) ≤
+          BitString.blen (BitString.pair f (BitString.e2 s)) := by
+      simpa [PrefixComplexity] using prefixConditionalComplexity_le_length hpRuns
+    simpa [JointComplexity] using le_trans hPrefix hpLen
 
 /-- Decode a packed pair back into its two exact bitstring components. -/
 def unpackInput (z : Program) : Program × Program :=
@@ -245,6 +357,157 @@ theorem length_jointRightOutputsUpToLength_le (x : Program) (n : Nat) :
         (prefixOutputsUpToLength [] n)
     _ ≤ 2 ^ (n + 1) - 1 := by
       exact length_prefixOutputsUpToLength_le [] n
+
+/-- The `t`-th joint-right discovery attempt, using `t.unpair.1` as bounded-evaluation fuel and
+`t.unpair.2` as an index into the finite witness family. -/
+def jointRightCandidateAtStep (x : Program) (n t : Nat) : Option Program :=
+  ((prefixWitnessPairsUpToLength n)[t.unpair.2]?).bind fun w =>
+    (prefixOutputAtFuel t.unpair.1 w.1 (packedInput [] w.2)).bind fun z =>
+      let xy := unpackInput z
+      if xy.1 = x then some xy.2 else none
+
+theorem jointRightCandidateAtStep_sound {x y : Program} {n t : Nat}
+    (h : jointRightCandidateAtStep x n t = some y) :
+    JointComplexity x y ≤ n := by
+  unfold jointRightCandidateAtStep at h
+  rw [Option.bind_eq_some_iff] at h
+  rcases h with ⟨w, hw, hrest⟩
+  rcases w with ⟨f, s⟩
+  rw [Option.bind_eq_some_iff] at hrest
+  rcases hrest with ⟨z, hz, hxy⟩
+  have hfs : (f, s) ∈ prefixWitnessPairsUpToLength n := by
+    rw [List.mem_iff_getElem?]
+    exact ⟨t.unpair.2, hw⟩
+  have hruns : runs f (packedInput [] s) z :=
+    prefixOutputAtFuel_sound hz
+  have hx : (unpackInput z).1 = x := by
+    by_cases hleft : (unpackInput z).1 = x
+    · simpa [hleft] using hxy
+    · simp [hleft] at hxy
+  have hy : (unpackInput z).2 = y := by
+    by_cases hleft : (unpackInput z).1 = x
+    · simpa [hleft] using hxy
+    · simp [hleft] at hxy
+  have hzxy : z = packedInput x y := by
+    calc
+      z = packedInput (unpackInput z).1 (unpackInput z).2 := by
+        simpa using (packedInput_unpackInput z).symm
+      _ = packedInput x y := by simpa [hx, hy]
+  exact (jointComplexity_le_iff_existsWitness (x := x) (y := y) (n := n)).mpr
+    ⟨f, s, hfs, by simpa [hzxy] using hruns⟩
+
+theorem jointRightCandidateAtStep_complete {x y : Program} {n : Nat}
+    (hxy : JointComplexity x y ≤ n) :
+    ∃ t, jointRightCandidateAtStep x n t = some y := by
+  rcases (jointComplexity_le_iff_existsWitness (x := x) (y := y) (n := n)).mp hxy with
+    ⟨f, s, hfs, hrun⟩
+  rw [List.mem_iff_getElem?] at hfs
+  rcases hfs with ⟨j, hj⟩
+  rcases prefixOutputAtFuel_complete hrun with ⟨k, hk⟩
+  refine ⟨Nat.pair k j, ?_⟩
+  simp [jointRightCandidateAtStep, Nat.unpair_pair, hj, hk, unpackInput_packedInput]
+
+/-- Add an optional newly discovered output to the end of an output list, unless it is already
+present. -/
+def appendIfNew (xs : List Program) (oy : Option Program) : List Program :=
+  match oy with
+  | none => xs
+  | some y => if y ∈ xs then xs else xs ++ [y]
+
+theorem sublist_appendIfNew (xs : List Program) (oy : Option Program) :
+    List.Sublist xs (appendIfNew xs oy) := by
+  cases oy with
+  | none =>
+      simp [appendIfNew]
+  | some y =>
+      by_cases hy : y ∈ xs
+      · simp [appendIfNew, hy]
+      · simp [appendIfNew, hy]
+
+theorem nodup_appendIfNew {xs : List Program} (hxs : xs.Nodup) (oy : Option Program) :
+    (appendIfNew xs oy).Nodup := by
+  cases oy with
+  | none =>
+      simpa [appendIfNew] using hxs
+  | some y =>
+      by_cases hy : y ∈ xs
+      · simpa [appendIfNew, hy] using hxs
+      · simpa [appendIfNew, hy, List.concat_eq_append] using hxs.concat hy
+
+theorem mem_appendIfNew_iff {xs : List Program} {oy : Option Program} {y : Program} :
+    y ∈ appendIfNew xs oy ↔ y ∈ xs ∨ oy = some y := by
+  cases oy with
+  | none =>
+      simp [appendIfNew]
+  | some z =>
+      by_cases hz : z ∈ xs
+      · rw [appendIfNew, if_pos hz]
+        constructor
+        · intro hy
+          exact Or.inl hy
+        · rintro (hy | hEq)
+          · exact hy
+          · injection hEq with hzy
+            simpa [hzy] using hz
+      · simpa [appendIfNew, hz, List.mem_append, eq_comm]
+
+/-- Discovery-order list of distinct right outputs found by scanning the first `t` many
+joint-right discovery attempts. -/
+def jointRightDiscoveredUpToStep (x : Program) (n : Nat) : Nat → List Program
+  | 0 => []
+  | t + 1 =>
+      appendIfNew (jointRightDiscoveredUpToStep x n t) (jointRightCandidateAtStep x n t)
+
+@[simp] theorem jointRightDiscoveredUpToStep_zero (x : Program) (n : Nat) :
+    jointRightDiscoveredUpToStep x n 0 = [] := rfl
+
+@[simp] theorem jointRightDiscoveredUpToStep_succ (x : Program) (n t : Nat) :
+    jointRightDiscoveredUpToStep x n (t + 1) =
+      appendIfNew (jointRightDiscoveredUpToStep x n t) (jointRightCandidateAtStep x n t) := rfl
+
+theorem nodup_jointRightDiscoveredUpToStep (x : Program) (n t : Nat) :
+    (jointRightDiscoveredUpToStep x n t).Nodup := by
+  induction t with
+  | zero =>
+      simp
+  | succ t ih =>
+      simpa [jointRightDiscoveredUpToStep_succ] using
+        nodup_appendIfNew ih (jointRightCandidateAtStep x n t)
+
+theorem mem_jointRightOutputsUpToLength_of_mem_jointRightDiscoveredUpToStep
+    {x y : Program} {n t : Nat}
+    (hy : y ∈ jointRightDiscoveredUpToStep x n t) :
+    y ∈ jointRightOutputsUpToLength x n := by
+  induction t with
+  | zero =>
+      simp at hy
+  | succ t ih =>
+      rw [jointRightDiscoveredUpToStep_succ, mem_appendIfNew_iff] at hy
+      rcases hy with hy | hy
+      · exact ih hy
+      · exact mem_jointRightOutputsUpToLength_of_jointComplexity_le
+          (jointRightCandidateAtStep_sound hy)
+
+theorem exists_jointRightDiscoveryStep_of_jointComplexity_le {x y : Program} {n : Nat}
+    (hxy : JointComplexity x y ≤ n) :
+    ∃ t, y ∈ jointRightDiscoveredUpToStep x n t := by
+  rcases jointRightCandidateAtStep_complete (x := x) (y := y) (n := n) hxy with ⟨t, ht⟩
+  refine ⟨t + 1, ?_⟩
+  rw [jointRightDiscoveredUpToStep_succ, mem_appendIfNew_iff]
+  exact Or.inr ht
+
+theorem length_jointRightDiscoveredUpToStep_le (x : Program) (n t : Nat) :
+    (jointRightDiscoveredUpToStep x n t).length ≤ (jointRightOutputsUpToLength x n).length := by
+  have hsubset :
+      (jointRightDiscoveredUpToStep x n t).toFinset ⊆ (jointRightOutputsUpToLength x n).toFinset := by
+    intro y hy
+    rw [List.mem_toFinset] at hy ⊢
+    exact mem_jointRightOutputsUpToLength_of_mem_jointRightDiscoveredUpToStep hy
+  have hcard :
+      (jointRightDiscoveredUpToStep x n t).toFinset.card ≤
+        (jointRightOutputsUpToLength x n).toFinset.card := Finset.card_le_card hsubset
+  rwa [List.toFinset_card_of_nodup (nodup_jointRightDiscoveredUpToStep x n t),
+    List.toFinset_card_of_nodup (nodup_jointRightOutputsUpToLength x n)] at hcard
 
 theorem exists_jointRightIndex_of_jointComplexity_le {x y : Program} {n : Nat}
     (hxy : JointComplexity x y ≤ n) :
