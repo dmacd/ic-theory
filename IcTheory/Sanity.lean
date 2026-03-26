@@ -95,6 +95,11 @@ example : PrefixRuns (pair emptyInterpreter (e2 (codeToProgram (Nat.Partrec.Code
   apply prefixRuns_emptyInterpreter_of_runs
   exact (runs_const_iff 5 [] (ofNatExact 5)).2 rfl
 
+example : PrefixRuns (pair outerApplyInterpreter (e2 (codeToProgram (Nat.Partrec.Code.const 5))))
+    [] (ofNatExact 5) := by
+  apply prefixRuns_outerApplyInterpreter_of_runs
+  exact (runs_const_iff 5 [] (ofNatExact 5)).2 rfl
+
 example :
     runs jointUpperInterpreter
       (packedInput []
@@ -143,6 +148,12 @@ example :
       (Complexity (ofNatExact 5))
       (Complexity (ofNatExact 5)) := by
   exact prefixComplexity_logLe_complexity (ofNatExact 5)
+
+example :
+    LogLe (PrefixConditionalComplexity (ofNatExact 5) [])
+      (ConditionalComplexity (ofNatExact 5) [])
+      (ConditionalComplexity (ofNatExact 5) []) := by
+  exact prefixConditionalComplexity_logLe_conditionalComplexity (ofNatExact 5) []
 
 end Sanity
 

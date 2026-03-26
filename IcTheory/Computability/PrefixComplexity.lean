@@ -41,6 +41,32 @@ theorem eval_applyInterpreterCode (n : Nat) :
       Code.eval (Denumerable.ofNat Code n.unpair.1) n.unpair.2 :=
   Classical.choose_spec exists_applyInterpreterCode n
 
+theorem evalOuterApply_partrec :
+    Nat.Partrec fun n =>
+      Code.eval (Denumerable.ofNat Code n.unpair.2) n.unpair.1 := by
+  have hfst : Computable₂ (fun a b : ℕ => a) := Computable₂.mk Computable.fst
+  have hsnd : Computable₂ (fun a b : ℕ => b) := Computable₂.mk Computable.snd
+  have hcode : Computable₂ (fun a b : ℕ => Denumerable.ofNat Code b) :=
+    (Computable.ofNat Code).comp₂ hsnd
+  have hEval : Partrec₂ (fun a b : ℕ => Code.eval (Denumerable.ofNat Code b) a) :=
+    Code.eval_part.comp₂ hcode hfst
+  simpa [Nat.unpaired] using (Partrec₂.unpaired'.2 hEval)
+
+theorem exists_outerApplyInterpreterCode :
+    ∃ c : Code, ∀ n : Nat,
+      Code.eval c n = Code.eval (Denumerable.ofNat Code n.unpair.2) n.unpair.1 := by
+  obtain ⟨c, hc⟩ := Code.exists_code.1 evalOuterApply_partrec
+  exact ⟨c, fun n => by simpa using congrFun hc n⟩
+
+/- A code that interprets a packed pair `(input, f)` by running `f` on `input`. -/
+noncomputable def outerApplyInterpreterCode : Code :=
+  Classical.choose exists_outerApplyInterpreterCode
+
+theorem eval_outerApplyInterpreterCode (n : Nat) :
+    Code.eval outerApplyInterpreterCode n =
+      Code.eval (Denumerable.ofNat Code n.unpair.2) n.unpair.1 :=
+  Classical.choose_spec exists_outerApplyInterpreterCode n
+
 theorem evalEmptyPacked_partrec :
     Nat.Partrec fun n =>
       Code.eval (Denumerable.ofNat Code n.unpair.2) 0 := by
@@ -79,14 +105,27 @@ noncomputable def emptyInterpreterPrefixOverhead : Nat :=
 noncomputable def applyInterpreter : Program :=
   codeToProgram applyInterpreterCode
 
+/-- Prefix interpreter for plain descriptions relative to the outer conditioning input. -/
+noncomputable def outerApplyInterpreter : Program :=
+  codeToProgram outerApplyInterpreterCode
+
 /-- The constant contribution of the fixed interpreter inside a prefix program. -/
 noncomputable def applyInterpreterPrefixOverhead : Nat :=
   2 * BitString.blen applyInterpreter + 2
+
+/-- The constant contribution of `outerApplyInterpreter` inside a prefix program. -/
+noncomputable def outerApplyInterpreterPrefixOverhead : Nat :=
+  2 * BitString.blen outerApplyInterpreter + 2
 
 @[simp] theorem runs_applyInterpreter_iff (input payload output : BitString) :
     runs applyInterpreter (packedInput input payload) output ↔ runs input payload output := by
   rw [applyInterpreter, runs_codeToProgram_iff]
   simp [packedInput, runs, programToCode, eval_applyInterpreterCode]
+
+@[simp] theorem runs_outerApplyInterpreter_iff (input payload output : BitString) :
+    runs outerApplyInterpreter (packedInput input payload) output ↔ runs payload input output := by
+  rw [outerApplyInterpreter, runs_codeToProgram_iff]
+  simp [packedInput, runs, programToCode, eval_outerApplyInterpreterCode]
 
 @[simp] theorem runs_emptyInterpreter_iff (input payload output : BitString) :
     runs emptyInterpreter (packedInput input payload) output ↔ runs payload [] output := by
@@ -145,6 +184,11 @@ theorem prefixRuns_applyInterpreter_of_runs {f r x : Program} (hf : runs f r x) 
   refine ⟨applyInterpreter, r, rfl, ?_⟩
   simpa using (runs_applyInterpreter_iff f r x).2 hf
 
+theorem prefixRuns_outerApplyInterpreter_of_runs {f input x : Program} (hf : runs f input x) :
+    PrefixRuns (BitString.pair outerApplyInterpreter (BitString.e2 f)) input x := by
+  refine ⟨outerApplyInterpreter, f, rfl, ?_⟩
+  simpa using (runs_outerApplyInterpreter_iff input f x).2 hf
+
 theorem prefixRuns_emptyInterpreter_of_runs {f x : Program} (hf : runs f [] x) :
     PrefixRuns (BitString.pair emptyInterpreter (BitString.e2 f)) [] x := by
   refine ⟨emptyInterpreter, f, rfl, ?_⟩
@@ -155,6 +199,12 @@ theorem prefixConditionalComplexity_le_applyInterpreter {f r x : Program}
     PrefixConditionalComplexity x f ≤
       BitString.blen (BitString.pair applyInterpreter (BitString.e2 r)) := by
   exact prefixConditionalComplexity_le_length (prefixRuns_applyInterpreter_of_runs hf)
+
+theorem prefixConditionalComplexity_le_outerApplyInterpreter {f input x : Program}
+    (hf : runs f input x) :
+    PrefixConditionalComplexity x input ≤
+      BitString.blen (BitString.pair outerApplyInterpreter (BitString.e2 f)) := by
+  exact prefixConditionalComplexity_le_length (prefixRuns_outerApplyInterpreter_of_runs hf)
 
 theorem prefixComplexity_le_emptyInterpreter {f x : Program}
     (hf : runs f [] x) :

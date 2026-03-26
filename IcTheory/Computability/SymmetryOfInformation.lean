@@ -229,6 +229,93 @@ theorem postComposeInterpreter_isPostComposeInterpreter :
     jointUpperSecondCodeNat, jointUpperSecondResidualNat, jointUpperDecoded, JointUpperPayload,
     hf', hg']
 
+/-- Specification of a fixed interpreter that, relative to an outer conditioning input `input`,
+runs a stored prefix description `(f, s)` to recover `x`, then runs a fixed second-stage program
+`g` on `(x, input)`. -/
+def IsConditionalPostComposeInterpreter (u : Program) : Prop :=
+  ∀ f s g input x y : Program,
+    runs f (packedInput input s) x →
+      runs g (packedInput x input) y →
+        runs u (packedInput input (JointUpperPayload s f [] g)) y
+
+private theorem evalConditionalPostCompose_partrec :
+    Nat.Partrec fun n =>
+      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+          (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun xNat =>
+        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+            (Nat.pair xNat n.unpair.1) := by
+  have hOuter : Computable fun n : Nat => n.unpair.1 := by
+    exact Computable.fst.comp Computable.unpair
+  have hFirstCode : Computable fun n => Denumerable.ofNat Code (jointUpperFirstCodeNat n) := by
+    exact (Computable.ofNat Code).comp jointUpperFirstCodeNat_computable
+  have hFirstInput : Computable fun n => Nat.pair n.unpair.1 (jointUpperResidualNat n) := by
+    exact (Primrec₂.natPair.to_comp).comp hOuter jointUpperResidualNat_computable
+  have hEval₁ : _root_.Partrec fun n =>
+      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+        (Nat.pair n.unpair.1 (jointUpperResidualNat n)) := by
+    exact Code.eval_part.comp hFirstCode hFirstInput
+  have hSecondCode : Computable fun p : Nat × Nat =>
+      Denumerable.ofNat Code (jointUpperSecondCodeNat p.1) := by
+    exact (Computable.ofNat Code).comp
+      (jointUpperSecondCodeNat_computable.comp Computable.fst)
+  have hSecondInput : Computable fun p : Nat × Nat =>
+      Nat.pair p.2 p.1.unpair.1 := by
+    exact (Primrec₂.natPair.to_comp).comp Computable.snd
+      (Computable.fst.comp (Computable.unpair.comp Computable.fst))
+  have hEval₂ : _root_.Partrec fun p : Nat × Nat =>
+      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat p.1))
+        (Nat.pair p.2 p.1.unpair.1) := by
+    exact Code.eval_part.comp hSecondCode hSecondInput
+  have hStep : _root_.Partrec₂ fun n xNat =>
+      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        (Nat.pair xNat n.unpair.1) := by
+    simpa using hEval₂.to₂
+  exact _root_.Partrec.nat_iff.1 (hEval₁.bind hStep)
+
+theorem exists_conditionalPostComposeInterpreterCode :
+    ∃ c : Code, ∀ n : Nat,
+      Code.eval c n =
+        Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+            (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun xNat =>
+          Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+              (Nat.pair xNat n.unpair.1) := by
+  obtain ⟨c, hc⟩ := Code.exists_code.1 evalConditionalPostCompose_partrec
+  exact ⟨c, fun n => by simpa using congrFun hc n⟩
+
+/-- Fixed interpreter used to postcompose a prefix description with a computation that also reads
+the outer conditioning input. -/
+noncomputable def conditionalPostComposeInterpreterCode : Code :=
+  Classical.choose exists_conditionalPostComposeInterpreterCode
+
+theorem eval_conditionalPostComposeInterpreterCode (n : Nat) :
+    Code.eval conditionalPostComposeInterpreterCode n =
+      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+          (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun xNat =>
+        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+            (Nat.pair xNat n.unpair.1) :=
+  Classical.choose_spec exists_conditionalPostComposeInterpreterCode n
+
+/-- Concrete interpreter for conditional postcomposition through the outer input channel. -/
+noncomputable def conditionalPostComposeInterpreter : Program :=
+  codeToProgram conditionalPostComposeInterpreterCode
+
+theorem conditionalPostComposeInterpreter_isConditionalPostComposeInterpreter :
+    IsConditionalPostComposeInterpreter conditionalPostComposeInterpreter := by
+  intro f s g input x y hf hg
+  have hf' :
+      Code.eval (Denumerable.ofNat Code (BitString.toNatExact f))
+          (Nat.pair (BitString.toNatExact input) (BitString.toNatExact s)) =
+        Part.some (BitString.toNatExact x) := by
+    simpa [runs, programToCode, toNatExact_packedInput] using hf
+  have hg' :
+      Code.eval (Denumerable.ofNat Code (BitString.toNatExact g))
+          (Nat.pair (BitString.toNatExact x) (BitString.toNatExact input)) =
+        Part.some (BitString.toNatExact y) := by
+    simpa [runs, programToCode, toNatExact_packedInput] using hg
+  rw [conditionalPostComposeInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
+  simp [eval_conditionalPostComposeInterpreterCode, jointUpperFirstCodeNat, jointUpperResidualNat,
+    jointUpperSecondCodeNat, jointUpperDecoded, JointUpperPayload, hf', hg']
+
 /-- Plain code that swaps the two components of a packed pair. -/
 def swapPackedCode : Code :=
   Code.pair Code.right Code.left
@@ -297,6 +384,15 @@ theorem prefixRuns_fixedPostcomposeWitness_of_runs {u g f s x y : Program}
     PrefixRuns (fixedPostcomposeWitness u g s f) [] y := by
   refine ⟨u, fixedPostcomposePayload s f g, rfl, ?_⟩
   exact hu f s g [] x y hf hg
+
+theorem prefixRuns_fixedConditionalPostcomposeWitness_of_runs
+    {u g f s input x y : Program}
+    (hu : IsConditionalPostComposeInterpreter u)
+    (hf : runs f (packedInput input s) x)
+    (hg : runs g (packedInput x input) y) :
+    PrefixRuns (fixedPostcomposeWitness u g s f) input y := by
+  refine ⟨u, fixedPostcomposePayload s f g, rfl, ?_⟩
+  simpa [fixedPostcomposePayload] using hu f s g input x y hf hg
 
 private theorem blen_ofNat_le_logPenalty_add_const {m n c : Nat}
     (hm : m ≤ 3 * n + (c + 3)) :
@@ -404,6 +500,78 @@ theorem prefixComplexity_logLe_of_fixedPostcompose {u g x y : Program}
       (c := BitString.blen (BitString.pair g (BitString.e2 [])))
       hpayload
   exact ⟨4, fixedPostcomposeWitnessOverhead u g, le_trans hy hqBound⟩
+
+/-- Conditional version of fixed postcomposition: relative to a conditioning input `input`,
+postcomposing a shortest prefix description of `x` with a fixed second-stage computation adds only
+logarithmic overhead. -/
+theorem prefixConditionalComplexity_logLe_of_fixedConditionalPostcompose
+    {u g x y input : Program}
+    (hu : IsConditionalPostComposeInterpreter u)
+    (hg : runs g (packedInput x input) y) :
+    LogLe (PrefixConditionalComplexity y input)
+      (PrefixConditionalComplexity x input)
+      (PrefixConditionalComplexity x input) := by
+  obtain ⟨p, hpLen, hpRuns⟩ := exists_program_forPrefixConditionalComplexity x input
+  rcases hpRuns with ⟨f, s, hpEq, hf⟩
+  let q : Program := fixedPostcomposeWitness u g s f
+  have hqRuns : PrefixRuns q input y := by
+    simpa [q] using
+      prefixRuns_fixedConditionalPostcomposeWitness_of_runs
+        (u := u) (g := g) (input := input) hu hf hg
+  have hy : PrefixConditionalComplexity y input ≤ BitString.blen q := by
+    exact prefixConditionalComplexity_le_length hqRuns
+  have hdesc :
+      BitString.blen (BitString.pair f (BitString.e2 s)) = PrefixConditionalComplexity x input := by
+    rw [← hpEq, hpLen]
+  have hpayload :
+      BitString.blen (fixedPostcomposePayload s f g) ≤
+        PrefixConditionalComplexity x input + 2 * logPenalty (PrefixConditionalComplexity x input) +
+          (BitString.blen (BitString.pair g (BitString.e2 [])) + 3) := by
+    simpa [hdesc] using
+      blen_fixedPostcomposePayload_le_of_length (g := g) (f := f) (s := s) hdesc
+  have hshape :
+      BitString.blen q =
+        2 * BitString.blen u + BitString.blen (fixedPostcomposePayload s f g) +
+          2 * BitString.blen (BitString.ofNat (BitString.blen (fixedPostcomposePayload s f g))) +
+            2 := by
+    simp [q, fixedPostcomposeWitness, BitString.blen_pair, BitString.blen_e2, Nat.add_assoc,
+      Nat.add_comm, Nat.add_left_comm]
+    omega
+  have hqBound :
+      BitString.blen q ≤
+        PrefixConditionalComplexity x input +
+          4 * logPenalty (PrefixConditionalComplexity x input) +
+          fixedPostcomposeWitnessOverhead u g := by
+    rw [hshape]
+    unfold fixedPostcomposeWitnessOverhead
+    exact fixedPostcomposeWitness_length_bound_const
+      (m := BitString.blen (fixedPostcomposePayload s f g))
+      (n := PrefixConditionalComplexity x input)
+      (u := BitString.blen u)
+      (c := BitString.blen (BitString.pair g (BitString.e2 [])))
+      hpayload
+  exact ⟨4, fixedPostcomposeWitnessOverhead u g, le_trans hy hqBound⟩
+
+/-- Running a program `f` on input `r` gives a logarithmic-overhead prefix description of the
+output from a prefix description of `f` conditioned on `r`. -/
+theorem prefixConditionalComplexity_logLe_of_runs {f r x : Program}
+    (hf : runs f r x) :
+    LogLe (PrefixConditionalComplexity x r)
+      (PrefixConditionalComplexity f r)
+      (BitString.blen f) := by
+  have hscale :
+      LogLe (PrefixConditionalComplexity f r)
+        (BitString.blen f)
+        (BitString.blen f) :=
+    prefixConditionalComplexity_log_upper f r
+  exact logLe_of_scale_logLe
+    (prefixConditionalComplexity_logLe_of_fixedConditionalPostcompose
+      (u := conditionalPostComposeInterpreter)
+      (g := applyInterpreter)
+      (x := f) (y := x) (input := r)
+      conditionalPostComposeInterpreter_isConditionalPostComposeInterpreter
+      (by simpa using (runs_applyInterpreter_iff f r x).2 hf))
+    hscale
 
 /-- One-sided swap invariance for joint prefix complexity. -/
 theorem jointSwapLogLe (x y : Program) :

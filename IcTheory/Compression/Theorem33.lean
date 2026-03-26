@@ -1,5 +1,5 @@
 import IcTheory.Compression.Section31
-import IcTheory.Computability.PrefixInformation
+import IcTheory.Computability.SymmetryOfInformation
 import Mathlib.Tactic
 
 namespace IcTheory
@@ -62,6 +62,28 @@ theorem prefixComplexity_le_gap_add_conditionalComplexity
     (prefixComplexity_log_upper f)
     (logLe_of_le (featureLength_le_gap_add_conditionalComplexity hshort hr hf hcomp))
 
+/-- Prefix-facing residual bridge: if the shortest feature is already bounded by the prefix
+conditional complexity of `x` given `r`, then the same length-gap argument is available entirely
+inside the prefix layer. -/
+theorem featureLength_le_gap_add_prefixConditionalComplexity
+    {fStar f x r : Program}
+    (hshortPrefix : BitString.blen fStar ≤ PrefixConditionalComplexity x r) :
+    BitString.blen f ≤ featureGap f fStar + PrefixConditionalComplexity x r := by
+  unfold featureGap
+  omega
+
+/-- Prefix complexity of `f` is bounded by the Theorem 3.3 gap plus the prefix conditional
+complexity of `x` given `r`, up to logarithmic slack in `l(f)`. -/
+theorem prefixComplexity_le_gap_add_prefixConditionalComplexity
+    {fStar f x r : Program}
+    (hshortPrefix : BitString.blen fStar ≤ PrefixConditionalComplexity x r) :
+    LogLe (PrefixComplexity f)
+      (featureGap f fStar + PrefixConditionalComplexity x r)
+      (BitString.blen f) := by
+  exact logLe_trans
+    (prefixComplexity_log_upper f)
+    (logLe_of_le (featureLength_le_gap_add_prefixConditionalComplexity hshortPrefix))
+
 /-- Additive form of Theorem 3.3 equation (16), reduced to a bridge from the local plain
 conditional complexity `C(x | r)` to the prefix conditional complexity `K(f | r)`. -/
 theorem theorem33_eq16_additive_of_conditionalBridge
@@ -101,6 +123,42 @@ theorem theorem33_eq16_of_conditionalBridge
       LogLe (ConditionalComplexity x r) (PrefixConditionalComplexity f r) (BitString.blen f)) :
     LogLe (PrefixInformation r f) (featureGap f fStar) (BitString.blen f) := by
   rcases theorem33_eq16_additive_of_conditionalBridge hshort hr hf hcomp hbridge with ⟨c, d, h⟩
+  refine ⟨c, d, ?_⟩
+  unfold PrefixInformation featureGap at *
+  omega
+
+/-- Theorem 3.3 equation (16), now reduced only to the remaining formalism gap between shortest
+features and prefix descriptions of `x` given the residual `r`. The right-hand bridge
+`K(x | r) ≤ K(f | r) + O(log l(f))` is proved concretely from `runs f r x`. -/
+theorem theorem33_eq16_additive_of_prefixShortestBridge
+    {fStar f x r : Program}
+    (hshortPrefix : BitString.blen fStar ≤ PrefixConditionalComplexity x r)
+    (hf : runs f r x) :
+    LogLe (PrefixComplexity f)
+      (featureGap f fStar + PrefixConditionalComplexity f r)
+      (BitString.blen f) := by
+  have hbase :
+      LogLe (PrefixComplexity f)
+        (featureGap f fStar + PrefixConditionalComplexity x r)
+        (BitString.blen f) :=
+    prefixComplexity_le_gap_add_prefixConditionalComplexity hshortPrefix
+  have hstep :
+      LogLe (featureGap f fStar + PrefixConditionalComplexity x r)
+        (featureGap f fStar + PrefixConditionalComplexity f r)
+        (BitString.blen f) := by
+    rcases prefixConditionalComplexity_logLe_of_runs hf with ⟨c, d, hcd⟩
+    refine ⟨c, d, ?_⟩
+    omega
+  exact logLe_trans hbase hstep
+
+/-- Paper-facing information form of Theorem 3.3 equation (16), reduced to the single remaining
+shortest-feature/prefix-description bridge. -/
+theorem theorem33_eq16_of_prefixShortestBridge
+    {fStar f x r : Program}
+    (hshortPrefix : BitString.blen fStar ≤ PrefixConditionalComplexity x r)
+    (hf : runs f r x) :
+    LogLe (PrefixInformation r f) (featureGap f fStar) (BitString.blen f) := by
+  rcases theorem33_eq16_additive_of_prefixShortestBridge hshortPrefix hf with ⟨c, d, h⟩
   refine ⟨c, d, ?_⟩
   unfold PrefixInformation featureGap at *
   omega

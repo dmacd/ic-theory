@@ -16,11 +16,12 @@ Current compiled coverage includes:
 - compression definitions and Section 2 results for features, descriptive maps, singleton
   features, and the universal-feature branch
 - Section 3.1 and 3.2 results, including the conditional-complexity characterizations of shortest
-  features/maps and the prefix upper bounds from Lemma 3.2
+  features/maps, the prefix upper bounds from Lemma 3.2, and the conditional bridge
+  `K(x | r) ≤ C(x | r) + O(log C(x | r))`
 - Section 3.3 machinery, including a paper-facing Lemma 3.3
 - a packaged Theorem 3.2 by cases
-- a Theorem 3.3 reduction layer for equation (16), currently expressed as a reduction to a
-  remaining conditional-complexity bridge
+- a Theorem 3.3 reduction layer for equation (16), with the residual-side prefix bridge proved
+  concretely and the remaining blocker isolated to the shortest-feature versus prefix-shortest gap
 
 The default library target builds with `lake build`.
 

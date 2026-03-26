@@ -56,6 +56,31 @@ theorem prefixConditionalComplexity_log_upper (x input : Program) :
     LogLe (PrefixConditionalComplexity x input) (BitString.blen x) (BitString.blen x) :=
   prefixConditionalComplexity_log_upper_of_le (x := x) (input := input) le_rfl
 
+theorem prefixConditionalComplexity_le_plainProgramLength {x input f : Program}
+    (hf : runs f input x) :
+    PrefixConditionalComplexity x input ≤
+      BitString.blen f + 2 * BitString.blen (BitString.ofNat (BitString.blen f)) +
+        outerApplyInterpreterPrefixOverhead := by
+  have h := prefixConditionalComplexity_le_outerApplyInterpreter hf
+  rw [BitString.blen_pair, BitString.blen_e2] at h
+  unfold outerApplyInterpreterPrefixOverhead at *
+  omega
+
+theorem prefixConditionalComplexity_logLe_conditionalComplexity (x input : Program) :
+    LogLe (PrefixConditionalComplexity x input)
+      (ConditionalComplexity x input)
+      (ConditionalComplexity x input) := by
+  obtain ⟨f, hfLen, hfRuns⟩ := exists_program_forConditionalComplexity x input
+  refine ⟨2, outerApplyInterpreterPrefixOverhead + 2, ?_⟩
+  have hupper := prefixConditionalComplexity_le_plainProgramLength hfRuns
+  rw [hfLen] at hupper
+  have hlog :
+      BitString.blen (BitString.ofNat (ConditionalComplexity x input)) ≤
+        logPenalty (ConditionalComplexity x input) + 1 := by
+    simpa using blen_ofNat_le_logPenalty_succ (ConditionalComplexity x input)
+  unfold outerApplyInterpreterPrefixOverhead logPenalty at *
+  omega
+
 theorem prefixComplexity_log_upper_of_le {x : Program} {n : Nat}
     (hx : BitString.blen x ≤ n) :
     LogLe (PrefixComplexity x) (BitString.blen x) n := by
@@ -80,15 +105,8 @@ theorem prefixComplexity_le_plainProgramLength {x f : Program}
 a shortest ordinary program gives a prefix program with only logarithmic extra cost. -/
 theorem prefixComplexity_logLe_complexity (x : Program) :
     LogLe (PrefixComplexity x) (Complexity x) (Complexity x) := by
-  obtain ⟨f, hfLen, hfRuns⟩ := exists_program_forComplexity x
-  refine ⟨2, emptyInterpreterPrefixOverhead + 2, ?_⟩
-  have hupper := prefixComplexity_le_plainProgramLength hfRuns
-  have hlog := blen_ofNat_le_logPenalty_succ (BitString.blen f)
-  rw [hfLen] at hupper
-  have hlog' : BitString.blen (BitString.ofNat (Complexity x)) ≤ logPenalty (Complexity x) + 1 := by
-    simpa [hfLen] using hlog
-  unfold emptyInterpreterPrefixOverhead logPenalty at *
-  omega
+  simpa [PrefixComplexity, Complexity] using
+    (prefixConditionalComplexity_logLe_conditionalComplexity x ([] : Program))
 
 /-- Paper-facing prefix information `I(f : x) = K(x) - K(x | f)`. -/
 noncomputable def PrefixInformation (f x : Program) : Nat :=
