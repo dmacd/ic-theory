@@ -88,6 +88,12 @@ theorem jointLowerAtFeatureScale_of_jointCountEnumerators {u v f x : Program}
       (u := v) (x := x) (y := f) (n := JointComplexity x f) hv)
     hscale
 
+/-- The Section 3.3 lower-chain hypothesis from the concrete right/left enumeration programs. -/
+theorem jointLowerAtFeatureScale {f x : Program}
+    (hscale : JointComplexity x f ≤ BitString.blen x) :
+    JointLowerChainRuleAt (BitString.blen x) x f := by
+  exact jointLowerChainRuleAt_concrete_of_scale_le (x := x) (y := f) hscale
+
 /-- Concrete sufficient conditions for the full Section 3.3 joint-rule package using the two
 enumerators directly. -/
 theorem jointRulesAtFeatureScale_of_jointCountEnumerators {u v f x : Program}
@@ -100,6 +106,18 @@ theorem jointRulesAtFeatureScale_of_jointCountEnumerators {u v f x : Program}
   refine ⟨?_, ?_, ?_⟩
   · exact jointLowerAtFeatureScale_of_jointCountEnumerators
       (u := u) (v := v) (f := f) (x := x) hu hv hlowerScale
+  · exact jointSwapInvariantAt_of_bounds hlowerScale hswapScale
+  · exact jointUpperAtFeatureScale hupperScale
+
+/-- The full Section 3.3 joint-rule package from the concrete machine witnesses already
+constructed in the project. -/
+theorem jointRulesAtFeatureScale_concrete {f x : Program}
+    (hlowerScale : JointComplexity x f ≤ BitString.blen x)
+    (hswapScale : JointComplexity f x ≤ BitString.blen x)
+    (hupperScale : PrefixComplexity f + PrefixConditionalComplexity x f ≤ BitString.blen x) :
+    JointRulesAtFeatureScale f x := by
+  refine ⟨?_, ?_, ?_⟩
+  · exact jointLowerAtFeatureScale (f := f) (x := x) hlowerScale
   · exact jointSwapInvariantAt_of_bounds hlowerScale hswapScale
   · exact jointUpperAtFeatureScale hupperScale
 
@@ -180,6 +198,19 @@ theorem lemma33_of_jointCountEnumerators {u v f x : Program}
   exact lemma33_of_jointRules hfeature hinfo
     (jointRulesAtFeatureScale_of_jointCountEnumerators
       (u := u) (v := v) (f := f) (x := x) hu hv hlowerScale hswapScale hupperScale)
+
+/-- Lemma 3.3 from the concrete right/left enumeration programs and the concrete upper-chain
+interpreter. -/
+theorem lemma33 {f x : Program}
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x)
+    (hlowerScale : JointComplexity x f ≤ BitString.blen x)
+    (hswapScale : JointComplexity f x ≤ BitString.blen x)
+    (hupperScale : PrefixComplexity f + PrefixConditionalComplexity x f ≤ BitString.blen x) :
+    LogLe (PrefixConditionalComplexity f x) 0 (BitString.blen x) := by
+  exact lemma33_of_jointRules hfeature hinfo
+    (jointRulesAtFeatureScale_concrete
+      (f := f) (x := x) hlowerScale hswapScale hupperScale)
 
 end
 

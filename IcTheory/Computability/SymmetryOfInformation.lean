@@ -723,6 +723,24 @@ theorem jointLowerChainRuleAt_of_jointRightCountBoundAt_of_leftProjection_of_sca
       (u := u) (x := x) (y := y) hu hcount)
     hscale
 
+/-- The heavy-left discovery machine discharges the sharp fixed-`x` count bound needed for the
+lower chain rule. -/
+theorem jointRightCountBoundAt_concrete {x y : Program} {n : Nat} :
+    JointRightCountBoundAt n x y := by
+  exact jointRightCountBoundAt_of_jointLeftCountEnumerator
+    (u := jointLeftCountEnumerator) (x := x) (y := y) (n := n)
+    jointLeftCountEnumerator_isJointLeftCountEnumerator
+
+/-- Concrete lower-chain theorem from the fixed right/left enumeration programs. -/
+theorem jointLowerChainRuleAt_concrete_of_scale_le {x y : Program} {n : Nat}
+    (hscale : JointComplexity x y ≤ n) :
+    JointLowerChainRuleAt n x y := by
+  exact jointLowerChainRuleAt_of_jointRightCountBoundAt_of_leftProjection_of_scale_le
+    (u := jointRightEnumerator) (x := x) (y := y)
+    jointRightEnumerator_isJointRightEnumerator
+    (jointRightCountBoundAt_concrete (x := x) (y := y) (n := JointComplexity x y))
+    hscale
+
 /-- Standard SoI consequence from lower chain rule, swap invariance, and upper chain rule. -/
 theorem symmetricInformationBound_of_jointRulesAt {n : Nat} {x y : Program}
     (hlower : JointLowerChainRuleAt n x y)
