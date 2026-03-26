@@ -50,6 +50,53 @@ theorem jointUpperAtFeatureScale {f x : Program}
     JointUpperChainRuleAt (BitString.blen x) f x := by
   exact jointUpperAtFeatureScale_of_interpreter jointUpperInterpreter_isJointUpperInterpreter hscale
 
+/-- The natural upper-chain scale `K(f) + K(x | f)` is itself bounded by `l(x)` up to
+logarithmic slack under the paper's high-information hypothesis. -/
+theorem upperScaleLogLe_of_highInformation {f x : Program}
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x) :
+    LogLe (PrefixComplexity f + PrefixConditionalComplexity x f)
+      (BitString.blen x)
+      (BitString.blen x) := by
+  have hlen : BitString.blen f ≤ BitString.blen x := (feature_length_lt hfeature).le
+  have hf :
+      LogLe (PrefixComplexity f + PrefixConditionalComplexity x f)
+        (BitString.blen f + PrefixConditionalComplexity x f)
+        (BitString.blen x) := by
+    rcases prefixComplexity_log_upper_of_le (x := f) hlen with ⟨c, d, hpf⟩
+    exact ⟨c, d, by omega⟩
+  exact logLe_trans hf (logLe_trans hinfo (prefixComplexity_log_upper x))
+
+/-- The Section 3.3 upper-chain hypothesis from the paper's feature/high-information data. -/
+theorem jointUpperAtFeatureScale_of_highInformation {f x : Program}
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x) :
+    JointUpperChainRuleAt (BitString.blen x) f x := by
+  exact jointUpperChainRuleAt_of_interpreter_of_scale_logLe
+    jointUpperInterpreter_isJointUpperInterpreter
+    (upperScaleLogLe_of_highInformation hfeature hinfo)
+
+/-- `K(f, x)` is bounded by `l(x)` up to logarithmic slack under the paper's hypotheses. -/
+theorem jointComplexity_featureObject_logLe_of_highInformation {f x : Program}
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x) :
+    LogLe (JointComplexity f x) (BitString.blen x) (BitString.blen x) := by
+  exact logLe_trans
+    (jointUpperAtFeatureScale_of_highInformation hfeature hinfo)
+    (upperScaleLogLe_of_highInformation hfeature hinfo)
+
+/-- `K(x, f)` is bounded by `l(x)` up to logarithmic slack under the paper's hypotheses. -/
+theorem jointComplexity_objectFeature_logLe_of_highInformation {f x : Program}
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x) :
+    LogLe (JointComplexity x f) (BitString.blen x) (BitString.blen x) := by
+  have hswap :
+      LogLe (JointComplexity x f) (JointComplexity f x) (BitString.blen x) := by
+    exact logLe_of_scale_logLe
+      (jointSwapLogLe x f)
+      (jointComplexity_featureObject_logLe_of_highInformation hfeature hinfo)
+  exact logLe_trans hswap (jointComplexity_featureObject_logLe_of_highInformation hfeature hinfo)
+
 /-- The Section 3.3 lower-chain hypothesis from a sharp fixed-`x` count bound at the natural
 joint-complexity scale. The projection and header terms are now handled internally. -/
 theorem jointLowerAtFeatureScale_of_jointRightCountBound {u f x : Program}
@@ -94,6 +141,15 @@ theorem jointLowerAtFeatureScale {f x : Program}
     JointLowerChainRuleAt (BitString.blen x) x f := by
   exact jointLowerChainRuleAt_concrete_of_scale_le (x := x) (y := f) hscale
 
+/-- The Section 3.3 lower-chain hypothesis from the paper's feature/high-information data. -/
+theorem jointLowerAtFeatureScale_of_highInformation {f x : Program}
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x) :
+    JointLowerChainRuleAt (BitString.blen x) x f := by
+  exact jointLowerChainRuleAt_concrete_of_scale_logLe
+    (x := x) (y := f)
+    (jointComplexity_objectFeature_logLe_of_highInformation hfeature hinfo)
+
 /-- Concrete sufficient conditions for the full Section 3.3 joint-rule package using the two
 enumerators directly. -/
 theorem jointRulesAtFeatureScale_of_jointCountEnumerators {u v f x : Program}
@@ -120,6 +176,18 @@ theorem jointRulesAtFeatureScale_concrete {f x : Program}
   · exact jointLowerAtFeatureScale (f := f) (x := x) hlowerScale
   · exact jointSwapInvariantAt_of_bounds hlowerScale hswapScale
   · exact jointUpperAtFeatureScale hupperScale
+
+/-- Full Section 3.3 joint-rule package from the paper's feature/high-information data alone. -/
+theorem jointRulesAtFeatureScale_of_highInformation {f x : Program}
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x) :
+    JointRulesAtFeatureScale f x := by
+  refine ⟨?_, ?_, ?_⟩
+  · exact jointLowerAtFeatureScale_of_highInformation hfeature hinfo
+  · exact jointSwapInvariantAt_of_logBounds
+      (jointComplexity_objectFeature_logLe_of_highInformation hfeature hinfo)
+      (jointComplexity_featureObject_logLe_of_highInformation hfeature hinfo)
+  · exact jointUpperAtFeatureScale_of_highInformation hfeature hinfo
 
 /-- Lemma 3.3 reduced to a symmetry-of-information hypothesis over the prefix layer. -/
 theorem lemma33_of_symmetry {f x : Program}
@@ -200,8 +268,8 @@ theorem lemma33_of_jointCountEnumerators {u v f x : Program}
       (u := u) (v := v) (f := f) (x := x) hu hv hlowerScale hswapScale hupperScale)
 
 /-- Lemma 3.3 from the concrete right/left enumeration programs and the concrete upper-chain
-interpreter. -/
-theorem lemma33 {f x : Program}
+interpreter, assuming the three natural scale bounds explicitly. -/
+theorem lemma33_of_concreteScales {f x : Program}
     (hfeature : IsFeature runs f x)
     (hinfo : HighInformationIn f x)
     (hlowerScale : JointComplexity x f ≤ BitString.blen x)
@@ -211,6 +279,14 @@ theorem lemma33 {f x : Program}
   exact lemma33_of_jointRules hfeature hinfo
     (jointRulesAtFeatureScale_concrete
       (f := f) (x := x) hlowerScale hswapScale hupperScale)
+
+/-- Paper-facing Lemma 3.3 with the scale bounds discharged internally. -/
+theorem lemma33 {f x : Program}
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x) :
+    LogLe (PrefixConditionalComplexity f x) 0 (BitString.blen x) := by
+  exact lemma33_of_jointRules hfeature hinfo
+    (jointRulesAtFeatureScale_of_highInformation hfeature hinfo)
 
 end
 

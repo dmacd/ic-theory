@@ -509,6 +509,13 @@ theorem jointSwapInvariantAt_of_bounds {x y : Program} {n : Nat}
     JointSwapInvariantAt n x y := by
   exact logEq_of_scale_le (jointSwapInvariantAt_max x y) (max_le_iff.mpr ⟨hxy, hyx⟩)
 
+theorem jointSwapInvariantAt_of_logBounds {x y : Program} {n : Nat}
+    (hxy : LogLe (JointComplexity x y) n n)
+    (hyx : LogLe (JointComplexity y x) n n) :
+    JointSwapInvariantAt n x y := by
+  exact ⟨logLe_of_scale_logLe (jointSwapLogLe x y) hyx,
+    logLe_of_scale_logLe (jointSwapLogLe y x) hxy⟩
+
 /-- Count-bound assumption for the fixed-`x` candidate family underlying the lower chain rule. -/
 def JointRightCountBoundAt (n : Nat) (x _y : Program) : Prop :=
   ∃ c d : Nat,
@@ -723,6 +730,17 @@ theorem jointLowerChainRuleAt_of_jointRightCountBoundAt_of_leftProjection_of_sca
       (u := u) (x := x) (y := y) hu hcount)
     hscale
 
+theorem jointLowerChainRuleAt_of_jointRightCountBoundAt_of_leftProjection_of_scale_logLe
+    {u x y : Program} {n : Nat}
+    (hu : IsJointRightEnumerator u)
+    (hcount : JointRightCountBoundAt (JointComplexity x y) x y)
+    (hscale : LogLe (JointComplexity x y) n n) :
+    JointLowerChainRuleAt n x y := by
+  exact logLe_of_scale_logLe
+    (jointLowerChainRuleAt_complexityScale_of_jointRightCountBoundAt_of_leftProjection
+      (u := u) (x := x) (y := y) hu hcount)
+    hscale
+
 /-- The heavy-left discovery machine discharges the sharp fixed-`x` count bound needed for the
 lower chain rule. -/
 theorem jointRightCountBoundAt_concrete {x y : Program} {n : Nat} :
@@ -736,6 +754,15 @@ theorem jointLowerChainRuleAt_concrete_of_scale_le {x y : Program} {n : Nat}
     (hscale : JointComplexity x y ≤ n) :
     JointLowerChainRuleAt n x y := by
   exact jointLowerChainRuleAt_of_jointRightCountBoundAt_of_leftProjection_of_scale_le
+    (u := jointRightEnumerator) (x := x) (y := y)
+    jointRightEnumerator_isJointRightEnumerator
+    (jointRightCountBoundAt_concrete (x := x) (y := y) (n := JointComplexity x y))
+    hscale
+
+theorem jointLowerChainRuleAt_concrete_of_scale_logLe {x y : Program} {n : Nat}
+    (hscale : LogLe (JointComplexity x y) n n) :
+    JointLowerChainRuleAt n x y := by
+  exact jointLowerChainRuleAt_of_jointRightCountBoundAt_of_leftProjection_of_scale_logLe
     (u := jointRightEnumerator) (x := x) (y := y)
     jointRightEnumerator_isJointRightEnumerator
     (jointRightCountBoundAt_concrete (x := x) (y := y) (n := JointComplexity x y))
@@ -815,6 +842,12 @@ theorem jointUpperChainRuleAt_of_interpreter_of_scale_le {u x y : Program} {n : 
     (hscale : PrefixComplexity x + PrefixConditionalComplexity y x ≤ n) :
     JointUpperChainRuleAt n x y := by
   exact logLe_of_scale_le (jointUpperChainRuleAt_complexityScale_of_interpreter hu) hscale
+
+theorem jointUpperChainRuleAt_of_interpreter_of_scale_logLe {u x y : Program} {n : Nat}
+    (hu : IsJointUpperInterpreter u)
+    (hscale : LogLe (PrefixComplexity x + PrefixConditionalComplexity y x) n n) :
+    JointUpperChainRuleAt n x y := by
+  exact logLe_of_scale_logLe (jointUpperChainRuleAt_complexityScale_of_interpreter hu) hscale
 
 end
 

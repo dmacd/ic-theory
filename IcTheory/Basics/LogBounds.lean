@@ -119,6 +119,71 @@ theorem logPenalty_twoPow_mul_succ_sub_one (n k : Nat) :
       rw [hlogk]
       simpa [Nat.add_assoc] using congrArg Nat.succ ih
 
+theorem logPenalty_le_of_le_log_scale {m n c d : Nat}
+    (h : m ≤ n + c * logPenalty n + d) :
+    logPenalty m ≤ logPenalty n + (c + d + 2) := by
+  let a : Nat := 2 ^ (c + d + 2)
+  have habig : c + d + 2 ≤ a := by
+    dsimp [a]
+    exact Nat.le_of_lt (show c + d + 2 < 2 ^ (c + d + 2) from Nat.lt_two_pow_self)
+  have ha1 : 1 ≤ a := by
+    exact le_trans (by omega) habig
+  have hac : c + 1 ≤ a := by
+    exact le_trans (by omega) habig
+  have had : d + 1 ≤ a := by
+    exact le_trans (by omega) habig
+  have hconst : d ≤ a - 1 := by
+    exact Nat.le_sub_one_of_lt (lt_of_lt_of_le (Nat.lt_succ_self d) had)
+  have hm : m ≤ (n + 1) * a - 1 := by
+    have hlog := logPenalty_le_self n
+    calc
+      m ≤ n + c * logPenalty n + d := h
+      _ ≤ n + c * n + d := by
+        have hc : c * logPenalty n ≤ c * n := Nat.mul_le_mul_left c hlog
+        omega
+      _ = (c + 1) * n + d := by
+        calc
+          n + c * n + d = c * n + n + d := by ac_rfl
+          _ = (c + 1) * n + d := by rw [Nat.add_mul, one_mul]
+      _ ≤ a * n + (a - 1) := by
+        have hmul : (c + 1) * n ≤ a * n := Nat.mul_le_mul_right n hac
+        exact Nat.add_le_add hmul hconst
+      _ = (n + 1) * a - 1 := by
+        calc
+          a * n + (a - 1) = a * n + a - 1 := by rw [Nat.add_sub_assoc ha1]
+          _ = n * a + a - 1 := by rw [Nat.mul_comm]
+          _ = (n + 1) * a - 1 := by rw [Nat.add_mul, one_mul]
+  have hmono : logPenalty m ≤ logPenalty ((n + 1) * a - 1) := logPenalty_mono hm
+  dsimp [a] at hmono ⊢
+  rw [logPenalty_twoPow_mul_succ_sub_one] at hmono
+  exact hmono
+
+theorem logLe_of_scale_logLe {a b m n : Nat}
+    (hab : LogLe a b m)
+    (hmn : LogLe m n n) :
+    LogLe a b n := by
+  rcases hab with ⟨c₁, d₁, h₁⟩
+  rcases hmn with ⟨c₂, d₂, h₂⟩
+  have hlog :
+      logPenalty m ≤ logPenalty n + (c₂ + d₂ + 2) :=
+    logPenalty_le_of_le_log_scale h₂
+  have hmul : c₁ * logPenalty m ≤ c₁ * (logPenalty n + (c₂ + d₂ + 2)) := by
+    exact Nat.mul_le_mul_left c₁ hlog
+  refine ⟨c₁, c₁ * (c₂ + d₂ + 2) + d₁, ?_⟩
+  calc
+    a ≤ b + c₁ * logPenalty m + d₁ := h₁
+    _ ≤ b + c₁ * (logPenalty n + (c₂ + d₂ + 2)) + d₁ := by
+      omega
+    _ = b + c₁ * logPenalty n + (c₁ * (c₂ + d₂ + 2) + d₁) := by
+      rw [Nat.mul_add]
+      omega
+
+theorem logEq_of_scale_logLe {a b m n : Nat}
+    (hab : LogEq a b m)
+    (hmn : LogLe m n n) :
+    LogEq a b n := by
+  exact ⟨logLe_of_scale_logLe hab.1 hmn, logLe_of_scale_logLe hab.2 hmn⟩
+
 theorem blen_ofNat_le_logPenalty_add_three_of_le_four_mul_add_three {m n : Nat}
     (h : m ≤ 4 * n + 3) :
     BitString.blen (BitString.ofNat m) ≤ logPenalty n + 3 := by
