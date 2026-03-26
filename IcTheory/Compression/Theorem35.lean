@@ -1,4 +1,5 @@
 import IcTheory.Compression.Theorem36
+import Mathlib.Data.Nat.Dist
 import Mathlib.Tactic
 
 namespace IcTheory
@@ -177,7 +178,7 @@ private theorem prefixConditionalComplexity_compose_logLe_of_lengthBounds
 /-- Prefix-form Lemma 3.4 at a bounded ambient scale. If `y` and `z` are both at most `n` bits
 long, then the information in `x` about `z` is bounded by the information in `x` about `y` plus a
 description of `z` from `y`, with logarithmic slack at scale `n`. -/
-theorem lemma34 {x y z : Program} {n : Nat}
+theorem lemma34_of_lengthBounds {x y z : Program} {n : Nat}
     (hy : BitString.blen y ≤ n)
     (hz : BitString.blen z ≤ n) :
     LogLe (PrefixInformation x z)
@@ -227,6 +228,13 @@ theorem lemma34 {x y z : Program} {n : Nat}
     exact Nat.le_of_add_le_add_left hsum''
   exact (Nat.sub_le_iff_le_add').2 <| by
     simpa [PrefixInformation, Nat.add_assoc, Nat.add_left_comm, Nat.add_comm] using hzBound
+
+/-- Prefix-form Lemma 3.4 at its canonical ambient scale. -/
+theorem lemma34 {x y z : Program} :
+    LogLe (PrefixInformation x z)
+      (PrefixInformation x y + PrefixConditionalComplexity z y)
+      (max (BitString.blen y) (BitString.blen z)) := by
+  exact lemma34_of_lengthBounds (Nat.le_max_left _ _) (Nat.le_max_right _ _)
 
 private theorem prefixInformation_logLe_swap_of_lengthBounds {y z : Program} {n : Nat}
     (hy : BitString.blen y ≤ n)
@@ -402,7 +410,7 @@ theorem theorem35_forward
           LogLe (PrefixInformation fi fj)
             (PrefixInformation fi r + PrefixConditionalComplexity fj r)
             (BitString.blen x) := by
-        exact lemma34 (x := fi) (y := r) (z := fj) hriLen hfjLen
+        exact lemma34_of_lengthBounds (x := fi) (y := r) (z := fj) hriLen hfjLen
       have hfinal := stepLogLe_trans (stepLogLe_of_logLe hlemma) hsum
       have hs : 1 + (1 + (1 + 2 * mid.length)) = 2 * mid.length + 3 := by
         omega
@@ -434,16 +442,116 @@ theorem theorem35_backward
     omega
   simpa [hs, Nat.mul_add, Nat.add_assoc, Nat.add_left_comm, Nat.add_comm] using hfinal
 
-/-- Prefix-form Theorem 3.5: in an incremental compression chain, two features separated by
+/-- Split-form Theorem 3.5: in an incremental compression chain, two features separated by
 `mid.length` intermediate steps carry only linearly many logarithmic-overhead steps of mutual
-information, in both directions. This is the current formalization-level version of
-`I(fi* : fj*) = O(|i - j| log l(x))`. -/
-theorem theorem35
+information, in both directions. -/
+theorem theorem35_split
     {x rs fi fj : Program} {pre mid post : List Program}
     (hchain : IsIncrementalPrefixCompression x (pre ++ [fi] ++ mid ++ [fj] ++ post) rs) :
-    StepLogLe (PrefixInformation fi fj) 0 (2 * mid.length + 3) (BitString.blen x) ∧
+    StepLogLe (PrefixInformation fi fj) 0 (2 * mid.length + 4) (BitString.blen x) ∧
       StepLogLe (PrefixInformation fj fi) 0 (2 * mid.length + 4) (BitString.blen x) := by
-  exact ⟨theorem35_forward hchain, theorem35_backward hchain⟩
+  refine ⟨?_, theorem35_backward hchain⟩
+  exact stepLogLe_of_stepCount_le (theorem35_forward hchain) (by omega)
+
+private theorem incrementalCompression_index_split
+    {x rs : Program} {fs : List Program} {i j : Nat}
+    (hi : i < fs.length)
+    (hj : j < fs.length)
+    (hij : i < j)
+    (hchain : IsIncrementalPrefixCompression x fs rs) :
+    IsIncrementalPrefixCompression x
+      (fs.take i ++ [fs[i]] ++ (fs.drop (i + 1)).take (j - i - 1) ++ [fs[j]] ++ fs.drop (j + 1))
+      rs := by
+  have hmid :
+      (fs.drop (i + 1)).drop (j - i - 1) = fs[j] :: fs.drop (j + 1) := by
+    have hk : j - i - 1 < (fs.drop (i + 1)).length := by
+      rw [List.length_drop]
+      omega
+    have hji : i + (1 + (j - i - 1)) = j := by
+      omega
+    calc
+      (fs.drop (i + 1)).drop (j - i - 1) =
+          (fs.drop (i + 1))[j - i - 1] :: (fs.drop (i + 1)).drop ((j - i - 1) + 1) := by
+        simpa using (List.cons_getElem_drop_succ (l := fs.drop (i + 1)) (n := j - i - 1) (h := hk)).symm
+      _ = fs[j] :: fs.drop (j + 1) := by
+        simp [List.getElem_drop, List.drop_drop, hji, Nat.add_assoc, Nat.add_left_comm, Nat.add_comm]
+  have hsplit :
+      fs =
+        fs.take i ++ [fs[i]] ++ (fs.drop (i + 1)).take (j - i - 1) ++ [fs[j]] ++ fs.drop (j + 1) := by
+    calc
+      fs = fs.take i ++ fs.drop i := by
+        simpa using (List.take_append_drop i fs).symm
+      _ = fs.take i ++ (fs[i] :: fs.drop (i + 1)) := by
+        rw [(List.cons_getElem_drop_succ (l := fs) (n := i) (h := hi)).symm]
+      _ = fs.take i ++ [fs[i]] ++ fs.drop (i + 1) := by
+        simp [List.append_assoc]
+      _ = fs.take i ++ [fs[i]] ++
+            ((fs.drop (i + 1)).take (j - i - 1) ++ (fs.drop (i + 1)).drop (j - i - 1)) := by
+        simpa [List.append_assoc] using
+          congrArg (fun t => fs.take i ++ [fs[i]] ++ t)
+            (List.take_append_drop (j - i - 1) (fs.drop (i + 1))).symm
+      _ = fs.take i ++ [fs[i]] ++ (fs.drop (i + 1)).take (j - i - 1) ++
+            (fs.drop (i + 1)).drop (j - i - 1) := by
+        simp [List.append_assoc]
+      _ = fs.take i ++ [fs[i]] ++ (fs.drop (i + 1)).take (j - i - 1) ++ [fs[j]] ++ fs.drop (j + 1) := by
+        rw [hmid]
+        simp [List.append_assoc]
+  have hrewritten : IsIncrementalPrefixCompression x
+      (fs.take i ++ [fs[i]] ++ (fs.drop (i + 1)).take (j - i - 1) ++ [fs[j]] ++ fs.drop (j + 1))
+      rs := by
+    rw [← hsplit]
+    exact hchain
+  exact hrewritten
+
+private theorem theorem35_of_ltIndices
+    {x rs : Program} {fs : List Program} {i j : Nat}
+    (hchain : IsIncrementalPrefixCompression x fs rs)
+    (hi : i < fs.length)
+    (hj : j < fs.length)
+    (hij : i < j) :
+    StepLogLe (PrefixInformation fs[i] fs[j]) 0 (2 * (j - i - 1) + 4) (BitString.blen x) ∧
+      StepLogLe (PrefixInformation fs[j] fs[i]) 0 (2 * (j - i - 1) + 4) (BitString.blen x) := by
+  have hmidLen : ((fs.drop (i + 1)).take (j - i - 1)).length = j - i - 1 := by
+    simp [List.length_take, List.length_drop]
+    omega
+  simpa [hmidLen] using
+    theorem35_split
+      (x := x) (rs := rs) (fi := fs[i]) (fj := fs[j])
+      (pre := fs.take i)
+      (mid := (fs.drop (i + 1)).take (j - i - 1))
+      (post := fs.drop (j + 1))
+      (incrementalCompression_index_split hi hj hij hchain)
+
+/-- Prefix-form Theorem 3.5 in index form. Two distinct features in an incremental compression
+chain are pairwise orthogonal, with logarithmic overhead linear in their distance. This is the
+current project-level formalization of `I(fi* : fj*) = O(|i - j| log l(x))`. -/
+theorem theorem35
+    {x rs : Program} {fs : List Program} {i j : Nat}
+    (hchain : IsIncrementalPrefixCompression x fs rs)
+    (hi : i < fs.length)
+    (hj : j < fs.length)
+    (hij : i ≠ j) :
+    StepLogLe (PrefixInformation fs[i] fs[j]) 0
+      (2 * (Nat.dist i j - 1) + 4)
+      (BitString.blen x) ∧
+      StepLogLe (PrefixInformation fs[j] fs[i]) 0
+      (2 * (Nat.dist i j - 1) + 4)
+      (BitString.blen x) := by
+  rcases Nat.lt_or_gt_of_ne hij with hij' | hij'
+  · have hlt :=
+      theorem35_of_ltIndices hchain hi hj hij'
+    have hdist : Nat.dist i j = j - i := by
+      exact Nat.dist_eq_sub_of_le hij'.le
+    simpa [hdist] using hlt
+  · have hlt :=
+      theorem35_of_ltIndices hchain hj hi hij'
+    have hdist : Nat.dist i j = i - j := by
+      exact Nat.dist_eq_sub_of_le_right hij'.le
+    have hswap :
+        StepLogLe (PrefixInformation fs[i] fs[j]) 0 (2 * (i - j - 1) + 4) (BitString.blen x) ∧
+          StepLogLe (PrefixInformation fs[j] fs[i]) 0 (2 * (i - j - 1) + 4) (BitString.blen x) := by
+      exact ⟨hlt.2, hlt.1⟩
+    simpa [hdist] using hswap
 
 end
 

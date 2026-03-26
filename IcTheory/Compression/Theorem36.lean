@@ -105,6 +105,18 @@ theorem stepLogLe_add_left {a b k s n : Nat}
   refine ⟨c, d, ?_⟩
   omega
 
+theorem stepLogLe_of_stepCount_le {a b s t n : Nat}
+    (hab : StepLogLe a b s n)
+    (hst : s ≤ t) :
+    StepLogLe a b t n := by
+  rcases hab with ⟨c, d, hcd⟩
+  refine ⟨c, d, ?_⟩
+  have hmul :
+      s * (c * logPenalty n + d) ≤
+        t * (c * logPenalty n + d) := by
+    exact Nat.mul_le_mul_right _ hst
+  exact le_trans hcd (by omega)
+
 theorem stepLogLe_add {a b s t n : Nat}
     (ha : StepLogLe a 0 s n)
     (hb : StepLogLe b 0 t n) :
@@ -168,6 +180,18 @@ theorem stepLogEq_add_left {a b k s n : Nat}
     (hab : StepLogEq a b s n) :
     StepLogEq (k + a) (k + b) s n := by
   exact ⟨stepLogLe_add_left hab.1, stepLogLe_add_left hab.2⟩
+
+theorem StepLogEq.symm {a b s n : Nat}
+    (hab : StepLogEq a b s n) :
+    StepLogEq b a s n := by
+  exact ⟨hab.2, hab.1⟩
+
+theorem stepLogEq_of_stepCount_le {a b s t n : Nat}
+    (hab : StepLogEq a b s n)
+    (hst : s ≤ t) :
+    StepLogEq a b t n := by
+  exact ⟨stepLogLe_of_stepCount_le hab.1 hst,
+    stepLogLe_of_stepCount_le hab.2 hst⟩
 
 /-- Prefix-complexity content of a feature list. This is the current formalization-level replacement
 for the paper's eventual `∑ l(fᵢ*)`, which will follow once the incompressibility bridge for
