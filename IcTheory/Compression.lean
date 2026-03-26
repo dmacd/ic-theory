@@ -10,3 +10,4 @@ import IcTheory.Compression.Corollary31
 import IcTheory.Compression.Theorem34
 import IcTheory.Compression.Theorem36
 import IcTheory.Compression.Theorem35
+import IcTheory.Compression.BFeatures
