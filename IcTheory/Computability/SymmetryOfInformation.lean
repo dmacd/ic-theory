@@ -316,6 +316,84 @@ theorem conditionalPostComposeInterpreter_isConditionalPostComposeInterpreter :
   simp [eval_conditionalPostComposeInterpreterCode, jointUpperFirstCodeNat, jointUpperResidualNat,
     jointUpperSecondCodeNat, jointUpperDecoded, JointUpperPayload, hf', hg']
 
+/-- Specification of a fixed interpreter that ignores the outer conditioning input and executes a
+stored exact pair payload `(s, f)` as the prefix description `⟨f, e2 s⟩` on empty input. -/
+def IsIgnoreConditionPrefixInterpreter (u : Program) : Prop :=
+  ∀ f s input x : Program,
+    runs f (packedInput [] s) x →
+      runs u (packedInput input (BitString.exactPairPayload s f)) x
+
+private def ignoreConditionPrefixDecoded (n : Nat) : Program × Program :=
+  BitString.decodeExactPairPayload (BitString.ofNatExact n.unpair.2)
+
+private theorem ignoreConditionPrefixDecoded_computable :
+    Computable ignoreConditionPrefixDecoded := by
+  exact BitString.decodeExactPairPayload_computable.comp
+    (BitString.ofNatExact_computable.comp (Computable.snd.comp Computable.unpair))
+
+private def ignoreConditionPrefixResidualNat (n : Nat) : Nat :=
+  BitString.toNatExact (ignoreConditionPrefixDecoded n).1
+
+private def ignoreConditionPrefixCodeNat (n : Nat) : Nat :=
+  BitString.toNatExact (ignoreConditionPrefixDecoded n).2
+
+private theorem ignoreConditionPrefixResidualNat_computable :
+    Computable ignoreConditionPrefixResidualNat := by
+  exact BitString.toNatExact_computable.comp
+    (Computable.fst.comp ignoreConditionPrefixDecoded_computable)
+
+private theorem ignoreConditionPrefixCodeNat_computable :
+    Computable ignoreConditionPrefixCodeNat := by
+  exact BitString.toNatExact_computable.comp
+    (Computable.snd.comp ignoreConditionPrefixDecoded_computable)
+
+private theorem evalIgnoreConditionPrefix_partrec :
+    Nat.Partrec fun n =>
+      Code.eval (Denumerable.ofNat Code (ignoreConditionPrefixCodeNat n))
+        (Nat.pair 0 (ignoreConditionPrefixResidualNat n)) := by
+  have hCode : Computable fun n => Denumerable.ofNat Code (ignoreConditionPrefixCodeNat n) := by
+    exact (Computable.ofNat Code).comp ignoreConditionPrefixCodeNat_computable
+  have hInput : Computable fun n => Nat.pair 0 (ignoreConditionPrefixResidualNat n) := by
+    exact (Primrec₂.natPair.to_comp).comp (Computable.const 0) ignoreConditionPrefixResidualNat_computable
+  exact _root_.Partrec.nat_iff.1 (Code.eval_part.comp hCode hInput)
+
+theorem exists_ignoreConditionPrefixInterpreterCode :
+    ∃ c : Code, ∀ n : Nat,
+      Code.eval c n =
+        Code.eval (Denumerable.ofNat Code (ignoreConditionPrefixCodeNat n))
+          (Nat.pair 0 (ignoreConditionPrefixResidualNat n)) := by
+  obtain ⟨c, hc⟩ := Code.exists_code.1 evalIgnoreConditionPrefix_partrec
+  exact ⟨c, fun n => by simpa using congrFun hc n⟩
+
+/-- Fixed interpreter used to turn an unconditional prefix description into one that can be used
+under arbitrary conditioning input by ignoring that input. -/
+noncomputable def ignoreConditionPrefixInterpreterCode : Code :=
+  Classical.choose exists_ignoreConditionPrefixInterpreterCode
+
+theorem eval_ignoreConditionPrefixInterpreterCode (n : Nat) :
+    Code.eval ignoreConditionPrefixInterpreterCode n =
+      Code.eval (Denumerable.ofNat Code (ignoreConditionPrefixCodeNat n))
+        (Nat.pair 0 (ignoreConditionPrefixResidualNat n)) :=
+  Classical.choose_spec exists_ignoreConditionPrefixInterpreterCode n
+
+/-- Concrete interpreter that ignores the outer conditioning input and replays a stored prefix
+description on empty input. -/
+noncomputable def ignoreConditionPrefixInterpreter : Program :=
+  codeToProgram ignoreConditionPrefixInterpreterCode
+
+theorem ignoreConditionPrefixInterpreter_isIgnoreConditionPrefixInterpreter :
+    IsIgnoreConditionPrefixInterpreter ignoreConditionPrefixInterpreter := by
+  intro f s input x hf
+  have hf' :
+      Code.eval (Denumerable.ofNat Code (BitString.toNatExact f))
+          (Nat.pair 0 (BitString.toNatExact s)) =
+        Part.some (BitString.toNatExact x) := by
+    simpa [runs, programToCode, toNatExact_packedInput] using hf
+  rw [ignoreConditionPrefixInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
+  simp [eval_ignoreConditionPrefixInterpreterCode, ignoreConditionPrefixCodeNat,
+    ignoreConditionPrefixResidualNat, ignoreConditionPrefixDecoded, hf',
+    BitString.decodeExactPairPayload_exactPairPayload]
+
 /-- Plain code that swaps the two components of a packed pair. -/
 def swapPackedCode : Code :=
   Code.pair Code.right Code.left
@@ -551,6 +629,60 @@ theorem prefixConditionalComplexity_logLe_of_fixedConditionalPostcompose
       (c := BitString.blen (BitString.pair g (BitString.e2 [])))
       hpayload
   exact ⟨4, fixedPostcomposeWitnessOverhead u g, le_trans hy hqBound⟩
+
+/-- A shortest unconditional prefix description of `x` can be replayed under arbitrary
+conditioning input with only logarithmic overhead. -/
+theorem prefixConditionalComplexity_logLe_prefixComplexity_at_self (x input : Program) :
+    LogLe (PrefixConditionalComplexity x input)
+      (PrefixComplexity x)
+      (PrefixComplexity x) := by
+  obtain ⟨p, hpLen, hpRuns⟩ := exists_program_forPrefixConditionalComplexity x []
+  rcases hpRuns with ⟨f, s, hpEq, hf⟩
+  let payload : Program := BitString.exactPairPayload s f
+  let q : Program := BitString.pair ignoreConditionPrefixInterpreter (BitString.e2 payload)
+  have hqRuns : PrefixRuns q input x := by
+    refine ⟨ignoreConditionPrefixInterpreter, payload, rfl, ?_⟩
+    exact ignoreConditionPrefixInterpreter_isIgnoreConditionPrefixInterpreter f s input x hf
+  have hx : PrefixConditionalComplexity x input ≤ BitString.blen q := by
+    exact prefixConditionalComplexity_le_length hqRuns
+  have hdesc :
+      BitString.blen (BitString.pair f (BitString.e2 s)) = PrefixComplexity x := by
+    rw [← hpEq, hpLen, PrefixComplexity]
+  have hpayload : BitString.blen payload ≤ PrefixComplexity x := by
+    simpa [payload, hdesc] using BitString.blen_exactPairPayload_le_prefixProgram s f
+  have hmono :
+      BitString.blen (BitString.ofNat (BitString.blen payload)) ≤
+        BitString.blen (BitString.ofNat (PrefixComplexity x)) := by
+    exact BitString.blen_ofNat_mono hpayload
+  have hlog :
+      BitString.blen (BitString.ofNat (BitString.blen payload)) ≤
+        logPenalty (PrefixComplexity x) + 1 := by
+    exact le_trans hmono (blen_ofNat_le_logPenalty_succ (PrefixComplexity x))
+  have hshape :
+      BitString.blen q =
+        2 * BitString.blen ignoreConditionPrefixInterpreter + BitString.blen payload +
+          2 * BitString.blen (BitString.ofNat (BitString.blen payload)) + 2 := by
+    simp [q, BitString.blen_pair, BitString.blen_e2, Nat.add_assoc, Nat.add_comm,
+      Nat.add_left_comm]
+    omega
+  have hqBound :
+      BitString.blen q ≤
+        PrefixComplexity x +
+          2 * logPenalty (PrefixComplexity x) +
+          (2 * BitString.blen ignoreConditionPrefixInterpreter + 4) := by
+    rw [hshape]
+    omega
+  exact ⟨2, 2 * BitString.blen ignoreConditionPrefixInterpreter + 4, le_trans hx hqBound⟩
+
+/-- General prefix-complexity monotonicity under conditioning: extra input helps by at most
+logarithmic overhead in the current prefix formalization. -/
+theorem prefixConditionalComplexity_logLe_prefixComplexity (x input : Program) :
+    LogLe (PrefixConditionalComplexity x input)
+      (PrefixComplexity x)
+      (BitString.blen x) := by
+  exact logLe_of_scale_logLe
+    (prefixConditionalComplexity_logLe_prefixComplexity_at_self x input)
+    (prefixComplexity_log_upper x)
 
 /-- Running a program `f` on input `r` gives a logarithmic-overhead prefix description of the
 output from a prefix description of `f` conditioned on `r`. -/

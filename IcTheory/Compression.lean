@@ -5,3 +5,4 @@ import IcTheory.Compression.Section32
 import IcTheory.Compression.Section33
 import IcTheory.Compression.Theorem32
 import IcTheory.Compression.Theorem33
+import IcTheory.Compression.Corollary31
