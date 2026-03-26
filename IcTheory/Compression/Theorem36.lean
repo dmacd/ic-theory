@@ -105,6 +105,65 @@ theorem stepLogLe_add_left {a b k s n : Nat}
   refine ⟨c, d, ?_⟩
   omega
 
+theorem stepLogLe_add {a b s t n : Nat}
+    (ha : StepLogLe a 0 s n)
+    (hb : StepLogLe b 0 t n) :
+    StepLogLe (a + b) 0 (s + t) n := by
+  rcases ha with ⟨c₁, d₁, h₁⟩
+  rcases hb with ⟨c₂, d₂, h₂⟩
+  refine ⟨c₁ + c₂, d₁ + d₂, ?_⟩
+  have hsum :
+      a + b ≤
+        s * (c₁ * logPenalty n + d₁) +
+          t * (c₂ * logPenalty n + d₂) := by
+    omega
+  have hbound :
+      s * (c₁ * logPenalty n + d₁) + t * (c₂ * logPenalty n + d₂) ≤
+        (s + t) * ((c₁ + c₂) * logPenalty n + (d₁ + d₂)) := by
+    let q := (c₁ + c₂) * logPenalty n + (d₁ + d₂)
+    have hs :
+        s * (c₁ * logPenalty n + d₁) ≤ s * q := by
+      have hq₁ : c₁ * logPenalty n + d₁ ≤ q := by
+        dsimp [q]
+        have hc :
+            c₁ * logPenalty n ≤ (c₁ + c₂) * logPenalty n := by
+          exact Nat.mul_le_mul_right _ (Nat.le_add_right c₁ c₂)
+        exact Nat.add_le_add hc (Nat.le_add_right d₁ d₂)
+      exact Nat.mul_le_mul_left s hq₁
+    have ht :
+        t * (c₂ * logPenalty n + d₂) ≤ t * q := by
+      have hq₂ : c₂ * logPenalty n + d₂ ≤ q := by
+        dsimp [q]
+        have hc :
+            c₂ * logPenalty n ≤ (c₁ + c₂) * logPenalty n := by
+          exact Nat.mul_le_mul_right _ (Nat.le_add_left c₂ c₁)
+        exact Nat.add_le_add hc (Nat.le_add_left d₂ d₁)
+      exact Nat.mul_le_mul_left t hq₂
+    calc
+      s * (c₁ * logPenalty n + d₁) + t * (c₂ * logPenalty n + d₂) ≤ s * q + t * q := by
+        exact Nat.add_le_add hs ht
+      _ = (s + t) * q := by
+        rw [Nat.add_mul]
+      _ = (s + t) * ((c₁ + c₂) * logPenalty n + (d₁ + d₂)) := by
+        rfl
+  simpa using le_trans hsum hbound
+
+theorem logLe_of_stepLogLe {a b s n : Nat}
+    (hab : StepLogLe a b s n) :
+    LogLe a b n := by
+  rcases hab with ⟨c, d, hcd⟩
+  refine ⟨s * c, s * d, ?_⟩
+  have hscale :
+      s * (c * logPenalty n + d) ≤
+        (s * c) * logPenalty n + s * d := by
+    rw [Nat.mul_add, Nat.mul_assoc]
+  calc
+    a ≤ b + s * (c * logPenalty n + d) := hcd
+    _ ≤ b + ((s * c) * logPenalty n + s * d) := by
+      exact Nat.add_le_add_left hscale b
+    _ = b + (s * c) * logPenalty n + s * d := by
+      omega
+
 theorem stepLogEq_add_left {a b k s n : Nat}
     (hab : StepLogEq a b s n) :
     StepLogEq (k + a) (k + b) s n := by

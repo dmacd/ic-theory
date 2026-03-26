@@ -54,6 +54,20 @@ theorem logLe_trans {a b c n : Nat} (hab : LogLe a b n) (hbc : LogLe b c n) : Lo
       rw [Nat.add_mul]
       omega
 
+theorem logLe_add {a b c d n : Nat}
+    (hab : LogLe a b n)
+    (hcd : LogLe c d n) :
+    LogLe (a + c) (b + d) n := by
+  rcases hab with ⟨c₁, d₁, h₁⟩
+  rcases hcd with ⟨c₂, d₂, h₂⟩
+  refine ⟨c₁ + c₂, d₁ + d₂, ?_⟩
+  calc
+    a + c ≤ (b + c₁ * logPenalty n + d₁) + (d + c₂ * logPenalty n + d₂) := by
+      exact Nat.add_le_add h₁ h₂
+    _ = b + d + (c₁ + c₂) * logPenalty n + (d₁ + d₂) := by
+      rw [Nat.add_mul]
+      omega
+
 theorem LogEq.symm {a b n : Nat} (h : LogEq a b n) : LogEq b a n :=
   ⟨h.2, h.1⟩
 
