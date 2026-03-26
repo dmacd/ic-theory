@@ -402,6 +402,10 @@ def swapPackedCode : Code :=
 def leftPackedCode : Code :=
   Code.comp Code.left Code.left
 
+/-- Plain code that extracts the right component of a packed pair. -/
+def rightPackedCode : Code :=
+  Code.comp Code.right Code.left
+
 /-- Plain code that extracts the left component of an outer packed input and then swaps the
 two components of that inner packed pair. -/
 def swapJointCode : Code :=
@@ -414,6 +418,10 @@ noncomputable def swapJoint : Program :=
 /-- Fixed program used to turn a description of `⟨x, y⟩` into one of `x`. -/
 noncomputable def leftPacked : Program :=
   codeToProgram leftPackedCode
+
+/-- Fixed program used to turn a description of `⟨x, y⟩` into one of `y`. -/
+noncomputable def rightPacked : Program :=
+  codeToProgram rightPackedCode
 
 /-- Length of the fixed prefix program used for the swap post-processing step. -/
 noncomputable def swapJointPrefixLength : Nat :=
@@ -436,11 +444,44 @@ noncomputable def swapJointPrefixLength : Nat :=
       rfl
   simpa using h
 
-@[simp] theorem runs_leftPacked_iff (x y : Program) :
-    runs leftPacked (packedInput (packedInput x y) []) x := by
+@[simp] theorem runs_swapJoint_outer_iff (input x y : Program) :
+    runs swapJoint (packedInput (packedInput x y) input) (packedInput y x) := by
+  rw [swapJoint, runs_codeToProgram_iff]
+  rw [toNatExact_packedInput, toNatExact_packedInput]
+  have h :
+      Code.eval swapJointCode
+          (Nat.pair (Nat.pair (BitString.toNatExact x) (BitString.toNatExact y))
+            (BitString.toNatExact input)) =
+        Part.some (Nat.pair (BitString.toNatExact y) (BitString.toNatExact x)) := by
+    simp [Seq.seq, Part.bind, Part.assert, (· <$> ·), swapJointCode, swapPackedCode,
+      Nat.Partrec.Code.eval]
+    apply Part.ext'
+    · constructor
+      · intro _; trivial
+      · intro _; exact ⟨trivial, trivial, trivial⟩
+    · intro _ _
+      rfl
+  simpa using h
+
+@[simp] theorem runs_leftPacked_outer_iff (input x y : Program) :
+    runs leftPacked (packedInput (packedInput x y) input) x := by
   rw [leftPacked, runs_codeToProgram_iff]
   rw [toNatExact_packedInput, toNatExact_packedInput]
   simp [leftPackedCode, Nat.Partrec.Code.eval]
+
+@[simp] theorem runs_leftPacked_iff (x y : Program) :
+    runs leftPacked (packedInput (packedInput x y) []) x := by
+  simpa using runs_leftPacked_outer_iff ([] : Program) x y
+
+@[simp] theorem runs_rightPacked_outer_iff (input x y : Program) :
+    runs rightPacked (packedInput (packedInput x y) input) y := by
+  rw [rightPacked, runs_codeToProgram_iff]
+  rw [toNatExact_packedInput, toNatExact_packedInput]
+  simp [rightPackedCode, Nat.Partrec.Code.eval]
+
+@[simp] theorem runs_rightPacked_iff (x y : Program) :
+    runs rightPacked (packedInput (packedInput x y) []) y := by
+  simpa using runs_rightPacked_outer_iff ([] : Program) x y
 
 /-- Machine-readable payload for postcomposing a shortest description with a fixed program `g`
 and empty residual. -/
@@ -728,6 +769,18 @@ theorem jointLeftProjectionLogLe (x y : Program) :
       (y := x)
       postComposeInterpreter_isPostComposeInterpreter
       (by simpa using runs_leftPacked_iff x y))
+
+/-- Right projection from joint complexity costs only logarithmic overhead. -/
+theorem jointRightProjectionLogLe (x y : Program) :
+    LogLe (PrefixComplexity y) (JointComplexity x y) (JointComplexity x y) := by
+  simpa [JointComplexity] using
+    (prefixComplexity_logLe_of_fixedPostcompose
+      (u := postComposeInterpreter)
+      (g := rightPacked)
+      (x := packedInput x y)
+      (y := y)
+      postComposeInterpreter_isPostComposeInterpreter
+      (by simpa using runs_rightPacked_iff x y))
 
 private theorem jointRightHeaderBound {x y : Program} {c d : Nat} :
     BitString.blen
