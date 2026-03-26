@@ -119,6 +119,32 @@ theorem blen_ofNatExact_le_ofNat (n : Nat) : blen (ofNatExact n) ≤ blen (ofNat
   rw [blen_ofNat_eq_size]
   exact blen_ofNatExact_le_size n
 
+theorem toNatExact_add_two_le_two_pow_succ_blen : ∀ x : BitString,
+    toNatExact x + 2 ≤ 2 ^ (blen x + 1)
+  | [] => by
+      simp [toNatExact, blen]
+  | false :: x => by
+      have ih := toNatExact_add_two_le_two_pow_succ_blen x
+      have hmul : 2 * (toNatExact x + 2) ≤ 2 * 2 ^ (blen x + 1) := by
+        exact Nat.mul_le_mul_left 2 ih
+      have hbound : 2 * toNatExact x + 1 + 2 ≤ 2 * 2 ^ (blen x + 1) := by
+        omega
+      simpa [toNatExact, blen_cons, pow_succ, two_mul, Nat.mul_comm, Nat.mul_left_comm,
+        Nat.mul_assoc] using hbound
+  | true :: x => by
+      have ih := toNatExact_add_two_le_two_pow_succ_blen x
+      have hmul : 2 * (toNatExact x + 2) ≤ 2 * 2 ^ (blen x + 1) := by
+        exact Nat.mul_le_mul_left 2 ih
+      have hbound : 2 * toNatExact x + 2 + 2 ≤ 2 * 2 ^ (blen x + 1) := by
+        omega
+      simpa [toNatExact, blen_cons, pow_succ, two_mul, Nat.mul_comm, Nat.mul_left_comm,
+        Nat.mul_assoc] using hbound
+
+theorem toNatExact_lt_two_pow_succ_blen (x : BitString) :
+    toNatExact x < 2 ^ (blen x + 1) := by
+  have h := toNatExact_add_two_le_two_pow_succ_blen x
+  omega
+
 @[simp] theorem toNatExact_ofNatExact (n : Nat) : toNatExact (ofNatExact n) = n := by
   refine Nat.strong_induction_on n ?_
   intro n ih

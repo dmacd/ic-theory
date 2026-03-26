@@ -119,6 +119,37 @@ theorem logPenalty_twoPow_mul_succ_sub_one (n k : Nat) :
       rw [hlogk]
       simpa [Nat.add_assoc] using congrArg Nat.succ ih
 
+theorem logPenalty_le_of_le_twoPow_mul_succ_sub_one {m n k : Nat}
+    (h : m ≤ (n + 1) * 2 ^ k - 1) :
+    logPenalty m ≤ logPenalty n + k := by
+  have hmono : logPenalty m ≤ logPenalty ((n + 1) * 2 ^ k - 1) := logPenalty_mono h
+  rw [logPenalty_twoPow_mul_succ_sub_one] at hmono
+  exact hmono
+
+theorem logPenalty_add_le (m n : Nat) :
+    logPenalty (m + n) ≤ logPenalty m + logPenalty n + 1 := by
+  let a : Nat := 2 ^ (logPenalty n + 1)
+  have ha : n + 1 ≤ a := by
+    dsimp [a]
+    unfold logPenalty
+    rw [Nat.log2_eq_log_two]
+    exact Nat.le_of_lt (Nat.lt_pow_succ_log_self Nat.one_lt_two (n + 1))
+  have ha1 : 1 ≤ a := by
+    exact le_trans (Nat.succ_le_succ (Nat.zero_le n)) ha
+  have hsum : m + n ≤ (m + 1) * a - 1 := by
+    have hn : n ≤ a - 1 := by
+      omega
+    calc
+      m + n ≤ m + (a - 1) := by omega
+      _ ≤ m * a + (a - 1) := by
+        exact Nat.add_le_add_right (by simpa [Nat.mul_comm] using Nat.mul_le_mul_left m ha1) _
+      _ = (m + 1) * a - 1 := by
+        rw [Nat.add_mul, one_mul, Nat.add_sub_assoc ha1]
+  have hlog :=
+    logPenalty_le_of_le_twoPow_mul_succ_sub_one
+      (m := m + n) (n := m) (k := logPenalty n + 1) (by simpa [a] using hsum)
+  omega
+
 theorem logPenalty_le_of_le_log_scale {m n c d : Nat}
     (h : m ≤ n + c * logPenalty n + d) :
     logPenalty m ≤ logPenalty n + (c + d + 2) := by
