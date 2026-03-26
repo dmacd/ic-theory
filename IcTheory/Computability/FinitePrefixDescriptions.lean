@@ -1947,6 +1947,370 @@ theorem jointRightEnumerator_isJointRightEnumerator : IsJointRightEnumerator joi
   change Nat.Partrec.Code.eval jointRightEnumeratorCode inputNat = Part.some (BitString.toNatExact y)
   exact hEval
 
+private theorem compressionCondition_primrec :
+    PrimrecPred fun a : Program × (Program × Program) =>
+      Compression.CompressionCondition a.1 a.2.1 a.2.2 := by
+  have hlenF : Primrec fun a : Program × (Program × Program) => BitString.blen a.1 := by
+    exact Primrec.list_length.comp Primrec.fst
+  have hlenR : Primrec fun a : Program × (Program × Program) => BitString.blen a.2.1 := by
+    exact Primrec.list_length.comp (Primrec.fst.comp Primrec.snd)
+  have hlenX : Primrec fun a : Program × (Program × Program) => BitString.blen a.2.2 := by
+    exact Primrec.list_length.comp (Primrec.snd.comp Primrec.snd)
+  have hsum :
+      Primrec fun a : Program × (Program × Program) =>
+        BitString.blen a.1 + BitString.blen a.2.1 := by
+    exact Primrec.nat_add.comp hlenF hlenR
+  exact Primrec.nat_lt.comp hsum hlenX
+
+/-- One bounded search attempt for a residual witnessing that `f` is a feature of `x`. The stage
+parameter `q` splits into execution fuel and a candidate residual index. Successful attempts output
+the packed pair `⟨r, f⟩`. -/
+def featureResidualPairCandidateAtStep (f x : Program) (q : Nat) : Option Program :=
+  ((BitString.allUpToLength (BitString.blen x))[q.unpair.2]?).bind fun r =>
+    (prefixOutputAtFuel q.unpair.1 f r).bind fun y =>
+      if y = x then
+        if Compression.CompressionCondition f r x then some (packedInput r f) else none
+      else none
+
+theorem featureResidualPairCandidateAtStep_sound {f x : Program} {q : Nat} {p : Program}
+    (h : featureResidualPairCandidateAtStep f x q = some p) :
+    ∃ r : Program, p = packedInput r f ∧ runs f r x ∧ Compression.CompressionCondition f r x := by
+  unfold featureResidualPairCandidateAtStep at h
+  rw [Option.bind_eq_some_iff] at h
+  rcases h with ⟨r, hr, hrest⟩
+  rw [Option.bind_eq_some_iff] at hrest
+  rcases hrest with ⟨y, hy, hp⟩
+  by_cases hyx : y = x
+  · simp [hyx] at hp
+    rcases hp with ⟨hcomp, rfl⟩
+    refine ⟨r, rfl, ?_, hcomp⟩
+    simpa [hyx] using (prefixOutputAtFuel_sound hy)
+  · simp [hyx] at hp
+
+private theorem featureResidualPairCandidateAtStep_primrec :
+    Primrec fun a : Program × Program × Nat => featureResidualPairCandidateAtStep a.1 a.2.1 a.2.2 := by
+  have hfuel : Primrec fun a : Program × Program × Nat => a.2.2.unpair.1 :=
+    Primrec.fst.comp (Primrec.unpair.comp (Primrec.snd.comp Primrec.snd))
+  have hindex : Primrec fun a : Program × Program × Nat => a.2.2.unpair.2 :=
+    Primrec.snd.comp (Primrec.unpair.comp (Primrec.snd.comp Primrec.snd))
+  have hresiduals : Primrec fun a : Program × Program × Nat => BitString.allUpToLength (BitString.blen a.2.1) := by
+    exact allUpToLength_primrec.comp (Primrec.list_length.comp (Primrec.fst.comp Primrec.snd))
+  have hwitness :
+      Primrec fun a : Program × Program × Nat =>
+        (BitString.allUpToLength (BitString.blen a.2.1))[a.2.2.unpair.2]? := by
+    exact Primrec.list_getElem?.comp hresiduals hindex
+  have hrunArg :
+      Primrec fun p : (Program × Program × Nat) × Program =>
+        (p.1.2.2.unpair.1, p.1.1, p.2) := by
+    exact Primrec.pair
+      (hfuel.comp Primrec.fst)
+      (Primrec.pair (Primrec.fst.comp Primrec.fst) Primrec.snd)
+  have hrun :
+      Primrec₂ fun (a : Program × Program × Nat) (r : Program) =>
+        prefixOutputAtFuel a.2.2.unpair.1 a.1 r :=
+    (prefixOutputAtFuel_primrec.comp hrunArg).to₂
+  have hsameOutput :
+      PrimrecPred fun q : ((Program × Program × Nat) × Program) × Program =>
+        q.2 = q.1.1.2.1 := by
+    exact PrimrecRel.comp (Primrec.eq : PrimrecRel (fun y z : Program => y = z))
+      Primrec.snd
+      (Primrec.fst.comp (Primrec.snd.comp (Primrec.fst.comp Primrec.fst)))
+  have hcompArg :
+      Primrec fun q : ((Program × Program × Nat) × Program) × Program =>
+        (q.1.1.1, (q.1.2, q.1.1.2.1)) := by
+    exact Primrec.pair
+      (Primrec.fst.comp (Primrec.fst.comp Primrec.fst))
+      (Primrec.pair
+        (Primrec.snd.comp Primrec.fst)
+        (Primrec.fst.comp (Primrec.snd.comp (Primrec.fst.comp Primrec.fst))))
+  have hcompPred :
+      PrimrecPred fun q : ((Program × Program × Nat) × Program) × Program =>
+        Compression.CompressionCondition q.1.1.1 q.1.2 q.1.1.2.1 := by
+    exact compressionCondition_primrec.comp hcompArg
+  have hsome :
+      Primrec fun q : ((Program × Program × Nat) × Program) × Program =>
+        some (packedInput q.1.2 q.1.1.1) := by
+    exact Primrec.option_some.comp
+      (packedInput_primrec.comp
+        (Primrec.snd.comp Primrec.fst)
+        (Primrec.fst.comp (Primrec.fst.comp Primrec.fst)))
+  have hifComp :
+      Primrec fun q : ((Program × Program × Nat) × Program) × Program =>
+        if Compression.CompressionCondition q.1.1.1 q.1.2 q.1.1.2.1 then
+          some (packedInput q.1.2 q.1.1.1)
+        else none := by
+    exact Primrec.ite hcompPred hsome (Primrec.const (Option.none : Option Program))
+  have hselect :
+      Primrec₂ fun (p : (Program × Program × Nat) × Program) (y : Program) =>
+        if y = p.1.2.1 then
+          if Compression.CompressionCondition p.1.1 p.2 p.1.2.1 then some (packedInput p.2 p.1.1)
+          else none
+        else none := by
+    exact (Primrec.ite hsameOutput hifComp (Primrec.const (Option.none : Option Program))).to₂
+  have hinner :
+      Primrec fun p : (Program × Program × Nat) × Program =>
+        (prefixOutputAtFuel p.1.2.2.unpair.1 p.1.1 p.2).bind fun y =>
+          if y = p.1.2.1 then
+            if Compression.CompressionCondition p.1.1 p.2 p.1.2.1 then some (packedInput p.2 p.1.1)
+            else none
+          else none :=
+    Primrec.option_bind hrun hselect
+  exact (Primrec.option_bind hwitness hinner.to₂).of_eq fun a => by
+    cases a with
+    | mk f xq =>
+        cases xq with
+        | mk x q =>
+            simp [featureResidualPairCandidateAtStep]
+
+theorem featureResidualPairCandidateAtStep_complete {f x r : Program}
+    (hf : runs f r x)
+    (hcomp : Compression.CompressionCondition f r x) :
+    ∃ q, featureResidualPairCandidateAtStep f x q = some (packedInput r f) := by
+  have hrLen : BitString.blen r ≤ BitString.blen x := by
+    unfold Compression.CompressionCondition at hcomp
+    omega
+  have hrMem : r ∈ BitString.allUpToLength (BitString.blen x) := by
+    exact (BitString.mem_allUpToLength_iff.mpr hrLen)
+  rw [List.mem_iff_getElem?] at hrMem
+  rcases hrMem with ⟨j, hj⟩
+  rcases prefixOutputAtFuel_complete hf with ⟨k, hk⟩
+  refine ⟨Nat.pair k j, ?_⟩
+  simp [featureResidualPairCandidateAtStep, Nat.unpair_pair, hj, hk, hcomp]
+
+/-- Discovery-order list of distinct residual pairs `⟨r, f⟩` found by scanning the first `t`
+many residual-search attempts for the fixed feature/input pair `(f, x)`. -/
+def featureResidualPairsDiscoveredUpToStep (f x : Program) : Nat → List Program
+  | 0 => []
+  | t + 1 =>
+      appendIfNew (featureResidualPairsDiscoveredUpToStep f x t)
+        (featureResidualPairCandidateAtStep f x t)
+
+@[simp] theorem featureResidualPairsDiscoveredUpToStep_zero (f x : Program) :
+    featureResidualPairsDiscoveredUpToStep f x 0 = [] := rfl
+
+@[simp] theorem featureResidualPairsDiscoveredUpToStep_succ (f x : Program) (t : Nat) :
+    featureResidualPairsDiscoveredUpToStep f x (t + 1) =
+      appendIfNew (featureResidualPairsDiscoveredUpToStep f x t)
+        (featureResidualPairCandidateAtStep f x t) := rfl
+
+theorem nodup_featureResidualPairsDiscoveredUpToStep (f x : Program) (t : Nat) :
+    (featureResidualPairsDiscoveredUpToStep f x t).Nodup := by
+  induction t with
+  | zero =>
+      simp
+  | succ t ih =>
+      simpa [featureResidualPairsDiscoveredUpToStep_succ] using
+        nodup_appendIfNew ih (featureResidualPairCandidateAtStep f x t)
+
+theorem mem_featureResidualPairsDiscoveredUpToStep_sound
+    {f x p : Program} {t : Nat}
+    (hp : p ∈ featureResidualPairsDiscoveredUpToStep f x t) :
+    ∃ r : Program, p = packedInput r f ∧ runs f r x ∧ Compression.CompressionCondition f r x := by
+  induction t with
+  | zero =>
+      simp at hp
+  | succ t ih =>
+      rw [featureResidualPairsDiscoveredUpToStep_succ, mem_appendIfNew_iff] at hp
+      rcases hp with hp | hp
+      · exact ih hp
+      · exact featureResidualPairCandidateAtStep_sound hp
+
+private theorem featureResidualPairsDiscoveredUpToStep_getElem?_mono
+    {f x : Program} {t u i : Nat} {p : Program}
+    (htu : t ≤ u)
+    (hp : (featureResidualPairsDiscoveredUpToStep f x t)[i]? = some p) :
+    (featureResidualPairsDiscoveredUpToStep f x u)[i]? = some p := by
+  induction htu with
+  | refl =>
+      exact hp
+  | @step u htu ih =>
+      rw [featureResidualPairsDiscoveredUpToStep_succ]
+      exact getElem?_appendIfNew_of_getElem? ih
+
+/-- The stabilized head of the discovered residual-pair list. -/
+private def featureResidualPairSearchStep (a : Program × Program) (t : Nat) : Option Program :=
+  (featureResidualPairsDiscoveredUpToStep a.1 a.2 t)[0]?
+
+private theorem featureResidualPairsDiscoveredUpToStep_primrec :
+    Primrec fun a : Program × Program × Nat => featureResidualPairsDiscoveredUpToStep a.1 a.2.1 a.2.2 := by
+  have hcandArg :
+      Primrec fun p : (Program × Program × Nat) × (Nat × List Program) =>
+        (p.1.1, p.1.2.1, p.2.1) := by
+    exact Primrec.pair
+      (Primrec.fst.comp Primrec.fst)
+      (Primrec.pair
+        (Primrec.fst.comp (Primrec.snd.comp Primrec.fst))
+        (Primrec.fst.comp Primrec.snd))
+  have hstep :
+      Primrec₂ fun (a : Program × Program × Nat) (p : Nat × List Program) =>
+        appendIfNew p.2 (featureResidualPairCandidateAtStep a.1 a.2.1 p.1) := by
+    exact appendIfNew_primrec.comp
+      (Primrec.snd.comp Primrec.snd)
+      (featureResidualPairCandidateAtStep_primrec.comp hcandArg)
+  refine (Primrec.nat_rec' (Primrec.snd.comp Primrec.snd)
+    (Primrec.const ([] : List Program)) hstep).of_eq ?_
+  intro a
+  cases a with
+  | mk f xt =>
+      cases xt with
+      | mk x t =>
+          induction t with
+          | zero =>
+              rfl
+          | succ t ih =>
+              simp [featureResidualPairsDiscoveredUpToStep, ih]
+
+private theorem featureResidualPairSearchStep_primrec : Primrec₂ featureResidualPairSearchStep := by
+  have harg : Primrec fun q : (Program × Program) × Nat => (q.1.1, q.1.2, q.2) := by
+    exact Primrec.pair
+      (Primrec.fst.comp Primrec.fst)
+      (Primrec.pair (Primrec.snd.comp Primrec.fst) Primrec.snd)
+  simpa [featureResidualPairSearchStep] using
+    (Primrec.list_getElem?.comp
+      (featureResidualPairsDiscoveredUpToStep_primrec.comp harg)
+      (Primrec.const (0 : Nat)))
+
+private theorem featureResidualPairSearchStep_computable : Computable₂ featureResidualPairSearchStep :=
+  featureResidualPairSearchStep_primrec.to_comp
+
+private def featureResidualPairArgsOfNat (inputNat : Nat) : Program × Program :=
+  unpackInput (BitString.ofNatExact inputNat)
+
+@[simp] private theorem featureResidualPairArgsOfNat_packedInput (f x : Program) :
+    featureResidualPairArgsOfNat (BitString.toNatExact (packedInput f x)) = (f, x) := by
+  rw [featureResidualPairArgsOfNat, BitString.ofNatExact_toNatExact]
+  exact unpackInput_packedInput f x
+
+private theorem featureResidualPairArgsOfNat_computable : Computable featureResidualPairArgsOfNat := by
+  exact unpackInput_computable.comp BitString.ofNatExact_computable
+
+private def featureResidualPairSearchStepNat (inputNat t : Nat) : Option Nat :=
+  (featureResidualPairSearchStep (featureResidualPairArgsOfNat inputNat) t).map BitString.toNatExact
+
+@[simp] private theorem featureResidualPairSearchStepNat_packedInput (f x : Program) (t : Nat) :
+    featureResidualPairSearchStepNat (BitString.toNatExact (packedInput f x)) t =
+      (featureResidualPairSearchStep (f, x) t).map BitString.toNatExact := by
+  rw [featureResidualPairSearchStepNat, featureResidualPairArgsOfNat_packedInput]
+
+private theorem featureResidualPairSearchStepNat_computable :
+    Computable₂ featureResidualPairSearchStepNat := by
+  exact Computable.option_map
+    (featureResidualPairSearchStep_computable.comp
+      (featureResidualPairArgsOfNat_computable.comp Computable.fst)
+      Computable.snd)
+    ((BitString.toNatExact_computable.comp Computable.snd).to₂)
+
+private theorem featureResidualPairSearcherNat_partrec :
+    Nat.Partrec fun inputNat => Nat.rfindOpt (featureResidualPairSearchStepNat inputNat) := by
+  exact Partrec.nat_iff.1 (Partrec.rfindOpt featureResidualPairSearchStepNat_computable)
+
+private theorem exists_featureResidualPairSearcherCode :
+    ∃ c : Nat.Partrec.Code,
+      ∀ inputNat : Nat,
+        Nat.Partrec.Code.eval c inputNat = Nat.rfindOpt (featureResidualPairSearchStepNat inputNat) := by
+  obtain ⟨c, hc⟩ := Nat.Partrec.Code.exists_code.1 featureResidualPairSearcherNat_partrec
+  exact ⟨c, fun inputNat => by simpa using congrFun hc inputNat⟩
+
+/-- Concrete program that, given the packed input `⟨f, x⟩`, returns the first discovered residual
+pair `⟨r, f⟩` witnessing that `f` is a feature of `x`. -/
+noncomputable def featureResidualPairSearcher : Program :=
+  UniversalMachine.codeToProgram (Classical.choose exists_featureResidualPairSearcherCode)
+
+private theorem eval_featureResidualPairSearcherCode (inputNat : Nat) :
+    Nat.Partrec.Code.eval (Classical.choose exists_featureResidualPairSearcherCode) inputNat =
+      Nat.rfindOpt (featureResidualPairSearchStepNat inputNat) :=
+  Classical.choose_spec exists_featureResidualPairSearcherCode inputNat
+
+theorem featureResidualPairSearcher_runs_of_feature {f x : Program}
+    (hfeature : Compression.IsFeature runs f x) :
+    ∃ p : Program, runs featureResidualPairSearcher (packedInput f x) p := by
+  rcases hfeature with ⟨g, r, hr, hf, hcomp⟩
+  obtain ⟨q, hq⟩ := featureResidualPairCandidateAtStep_complete hf hcomp
+  have hmem :
+      packedInput r f ∈ featureResidualPairsDiscoveredUpToStep f x (q + 1) := by
+    rw [featureResidualPairsDiscoveredUpToStep_succ, mem_appendIfNew_iff]
+    exact Or.inr hq
+  have hpos : 0 < (featureResidualPairsDiscoveredUpToStep f x (q + 1)).length := by
+    exact List.length_pos_of_mem hmem
+  let p : Program := (featureResidualPairsDiscoveredUpToStep f x (q + 1))[0]'hpos
+  have hpStep : featureResidualPairSearchStep (f, x) (q + 1) = some p := by
+    simp [featureResidualPairSearchStep, p, hpos]
+  refine ⟨p, ?_⟩
+  let inputNat := BitString.toNatExact (packedInput f x)
+  have hmono :
+      ∀ {a m u}, m ≤ u →
+        a ∈ featureResidualPairSearchStepNat inputNat m →
+        a ∈ featureResidualPairSearchStepNat inputNat u := by
+    intro a m u hmu hm
+    rw [featureResidualPairSearchStepNat_packedInput] at hm ⊢
+    rw [Option.mem_def] at hm ⊢
+    rcases hstep : featureResidualPairSearchStep (f, x) m with _ | p'
+    · simp [hstep] at hm
+    · simp [hstep] at hm
+      subst a
+      have hstep' : featureResidualPairSearchStep (f, x) u = some p' := by
+        exact featureResidualPairsDiscoveredUpToStep_getElem?_mono hmu hstep
+      simp [hstep']
+  have hstepNat : BitString.toNatExact p ∈ featureResidualPairSearchStepNat inputNat (q + 1) := by
+    rw [featureResidualPairSearchStepNat_packedInput]
+    simpa [Option.mem_def, hpStep]
+  have hrfind :
+      BitString.toNatExact p ∈ Nat.rfindOpt (featureResidualPairSearchStepNat inputNat) := by
+    exact (Nat.rfindOpt_mono hmono).2 ⟨q + 1, hstepNat⟩
+  rw [featureResidualPairSearcher, UniversalMachine.runs_codeToProgram_iff]
+  change Nat.Partrec.Code.eval (Classical.choose exists_featureResidualPairSearcherCode) inputNat =
+    Part.some (BitString.toNatExact p)
+  calc
+    Nat.Partrec.Code.eval (Classical.choose exists_featureResidualPairSearcherCode) inputNat =
+        Nat.rfindOpt (featureResidualPairSearchStepNat inputNat) :=
+          eval_featureResidualPairSearcherCode inputNat
+    _ = Part.some (BitString.toNatExact p) := Part.eq_some_iff.2 hrfind
+
+theorem featureResidualPairSearcher_sound {f x p : Program}
+    (hp : runs featureResidualPairSearcher (packedInput f x) p) :
+    ∃ r : Program, p = packedInput r f ∧ runs f r x ∧ Compression.CompressionCondition f r x := by
+  rw [featureResidualPairSearcher, UniversalMachine.runs_codeToProgram_iff] at hp
+  let inputNat := BitString.toNatExact (packedInput f x)
+  have hmono :
+      ∀ {a m u}, m ≤ u →
+        a ∈ featureResidualPairSearchStepNat inputNat m →
+        a ∈ featureResidualPairSearchStepNat inputNat u := by
+    intro a m u hmu hm
+    rw [featureResidualPairSearchStepNat_packedInput] at hm ⊢
+    rw [Option.mem_def] at hm ⊢
+    rcases hstep : featureResidualPairSearchStep (f, x) m with _ | p'
+    · simp [hstep] at hm
+    · simp [hstep] at hm
+      subst a
+      have hstep' : featureResidualPairSearchStep (f, x) u = some p' := by
+        exact featureResidualPairsDiscoveredUpToStep_getElem?_mono hmu hstep
+      simp [hstep']
+  have hpNat : BitString.toNatExact p ∈ Nat.rfindOpt (featureResidualPairSearchStepNat inputNat) := by
+    have hp' : Nat.rfindOpt (featureResidualPairSearchStepNat inputNat) =
+        Part.some (BitString.toNatExact p) := by
+      calc
+        Nat.rfindOpt (featureResidualPairSearchStepNat inputNat) =
+            Nat.Partrec.Code.eval (Classical.choose exists_featureResidualPairSearcherCode) inputNat := by
+              symm
+              exact eval_featureResidualPairSearcherCode inputNat
+        _ = Part.some (BitString.toNatExact p) := hp
+    exact Part.eq_some_iff.1 hp'
+  rcases (Nat.rfindOpt_mono hmono).1 hpNat with ⟨t, hstepNat⟩
+  rw [featureResidualPairSearchStepNat_packedInput] at hstepNat
+  rw [Option.mem_def] at hstepNat
+  rcases hstep : featureResidualPairSearchStep (f, x) t with _ | p'
+  · simp [hstep] at hstepNat
+  · simp [hstep] at hstepNat
+    have hpEq : p' = p := BitString.toNatExact_injective hstepNat
+    have hpMem : p' ∈ featureResidualPairsDiscoveredUpToStep f x t := by
+      rw [List.mem_iff_getElem?]
+      exact ⟨0, hstep⟩
+    rcases mem_featureResidualPairsDiscoveredUpToStep_sound hpMem with ⟨r, hrEq, hf, hcomp⟩
+    refine ⟨r, ?_, hf, hcomp⟩
+    calc
+      p = p' := hpEq.symm
+      _ = packedInput r f := hrEq
+
 private theorem blen_jointRightPayload_le_of_index_lt {n i : Nat}
     (hi : i < 2 ^ (n + 1) - 1) :
     BitString.blen (jointRightPayload n i) ≤ n + 3 * logPenalty n + 5 := by

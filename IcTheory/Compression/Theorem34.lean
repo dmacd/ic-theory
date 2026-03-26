@@ -1,4 +1,5 @@
 import IcTheory.Compression.Corollary31
+import IcTheory.Compression.Theorem32
 import Mathlib.Tactic
 
 namespace IcTheory
@@ -69,6 +70,38 @@ theorem noSuperfluousPair_feature {r f x : Program}
         (BitString.blen x) := by
     exact logLe_trans hpair (logLe_of_le (Nat.zero_le _))
   exact logLe_trans (logLe_of_scale_logLe hproj hpairScale) hpair
+
+/-- Theorem 3.4 equation (26), prefix-facing existence form: once the Theorem 3.2 case split is
+available, every shortest feature has some residual pair recoverable from `x` with only logarithmic
+advice. The residual is chosen canonically by the fixed searcher in the computability layer. -/
+theorem exists_noSuperfluousPair_of_shortestFeature_of_cases
+    {f x : Program}
+    (hshort : IsShortestFeature runs f x)
+    (hcases : CompressibleByMoreThan universalFeatureConstant x ∨
+      LogLe (BitString.blen x) (PrefixComplexity x) (BitString.blen x)) :
+    ∃ r : Program, runs f r x ∧ CompressionCondition f r x ∧ NoSuperfluousPair r f x := by
+  have hfeature : IsFeature runs f x := shortestFeature_isFeature hshort
+  obtain ⟨p, hpRun⟩ := featureResidualPairSearcher_runs_of_feature hfeature
+  obtain ⟨r, hpEq, hf, hcomp⟩ := featureResidualPairSearcher_sound hpRun
+  refine ⟨r, hf, hcomp, ?_⟩
+  have hpairFromFeature :
+      LogLe (PrefixConditionalComplexity (packedInput r f) x)
+        (PrefixConditionalComplexity f x)
+        (PrefixConditionalComplexity f x) := by
+    exact prefixConditionalComplexity_logLe_of_fixedConditionalPostcompose
+      (u := conditionalPostComposeInterpreter)
+      (g := featureResidualPairSearcher)
+      conditionalPostComposeInterpreter_isConditionalPostComposeInterpreter
+      (by simpa [hpEq] using hpRun)
+  have hfeaturePrefix :
+      LogLe (PrefixConditionalComplexity f x) 0 (BitString.blen x) := by
+    exact (theorem32_of_cases (x := x) hcases).1 f hshort
+  have hscale :
+      LogLe (PrefixConditionalComplexity f x)
+        (BitString.blen x)
+        (BitString.blen x) := by
+    exact logLe_trans hfeaturePrefix (logLe_of_le (Nat.zero_le _))
+  exact logLe_trans (logLe_of_scale_logLe hpairFromFeature hscale) hfeaturePrefix
 
 /-- A no-superfluous pair is itself no more complex than `x`, up to logarithmic slack. -/
 theorem pairComplexity_logLe_of_noSuperfluousPair {r f x : Program}
