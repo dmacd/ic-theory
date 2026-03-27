@@ -1,5 +1,6 @@
 import IcTheory.Computability
 import IcTheory.Compression.Section32
+import IcTheory.Compression.Theorem39
 
 namespace IcTheory
 
@@ -154,6 +155,14 @@ example :
       (ConditionalComplexity (ofNatExact 5) [])
       (ConditionalComplexity (ofNatExact 5) []) := by
   exact prefixConditionalComplexity_logLe_conditionalComplexity (ofNatExact 5) []
+
+example :
+    PrefixRuns (pair schemeDescriptionPrefixInterpreter (e2 (schemeDescription [] []))) [] [] := by
+  apply prefixRuns_schemeDescription_of_runs
+  simpa using
+    (schemeDescriptionInterpreter_runs_of_storedPrograms
+      (storedFs := []) (r := []) (x := [])
+      (RunsStoredProgramList.nil []))
 
 end Sanity
 
