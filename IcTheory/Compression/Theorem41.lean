@@ -821,6 +821,63 @@ theorem theorem41_runtimeReduction_closed
   exact le_trans hbound
     (uniformBranchSearchTimeBound_le_closed (autoencoderPayloadBound b) localWork)
 
+/-- Closed-form split-work wrapper for Theorem 4.1, using separate `t_i` and `t_i'` lists. -/
+theorem theorem41_runtimeReduction_closed_split
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    {featureWork mapWork : List Nat}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs)
+    (hfeatureLen : fs.length = featureWork.length)
+    (hmapLen : gs.length = mapWork.length) :
+    ∃ node, IsAliceBranch x node ∧ node.description = schemeDescription rs fs ∧
+      runs schemeDescriptionInterpreter node.description x ∧
+      branchSearchTimeBound fs gs (List.zipWith (· + ·) featureWork mapWork) ≤
+        ((List.zipWith (· + ·) featureWork mapWork).sum +
+            (List.zipWith (· + ·) featureWork mapWork).length) *
+          2 ^ ((autoencoderPayloadBound b + 1) *
+            (List.zipWith (· + ·) featureWork mapWork).length) := by
+  let localWork := List.zipWith (· + ·) featureWork mapWork
+  have hlen : fs.length = localWork.length := by
+    have hwork : featureWork.length = mapWork.length := by
+      calc
+        featureWork.length = fs.length := by simpa using hfeatureLen.symm
+        _ = gs.length := incrementalBCompressionScheme_lengths_eq hchain
+        _ = mapWork.length := by simpa using hmapLen
+    rw [List.length_zipWith, hfeatureLen]
+    simpa [hwork]
+  simpa [localWork] using theorem41_runtimeReduction_closed hb hchain hlen
+
+/-- Current-form Theorem 4.1. ALICE contains the branch produced by any incremental
+`b`-compression scheme, the branch carries the concrete description `D_s = ⟨s, r_s, f_s, ..., f_1⟩`,
+the search time admits the exact weighted current-model expansion in split `t_i / t_i'` form, and
+it is bounded both by the uniform weighted sum and by the coarse closed arithmetic expression. -/
+theorem theorem41
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    {featureWork mapWork : List Nat}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs)
+    (hfeatureLen : fs.length = featureWork.length)
+    (hmapLen : gs.length = mapWork.length) :
+    ∃ node, IsAliceBranch x node ∧ node.description = schemeDescription rs fs ∧
+      runs schemeDescriptionInterpreter node.description x ∧
+      branchSearchTimeBound fs gs (List.zipWith (· + ·) featureWork mapWork) =
+        (branchSearchTimeExplicitTerms fs gs
+          (List.zipWith (· + ·) featureWork mapWork)).sum ∧
+      (branchSearchTimeExplicitTerms fs gs
+          (List.zipWith (· + ·) featureWork mapWork)).sum ≤
+        (uniformBranchSearchTimeTerms (autoencoderPayloadBound b)
+          (List.zipWith (· + ·) featureWork mapWork)).sum ∧
+      branchSearchTimeBound fs gs (List.zipWith (· + ·) featureWork mapWork) ≤
+        ((List.zipWith (· + ·) featureWork mapWork).sum +
+            (List.zipWith (· + ·) featureWork mapWork).length) *
+          2 ^ ((autoencoderPayloadBound b + 1) *
+            (List.zipWith (· + ·) featureWork mapWork).length) := by
+  obtain ⟨node, hnode, hdesc, hruns, hexact, huniform⟩ :=
+    theorem41_runtimeReduction_explicit_split hb hchain hfeatureLen hmapLen
+  obtain ⟨_, _, _, _, hclosed⟩ :=
+    theorem41_runtimeReduction_closed_split hb hchain hfeatureLen hmapLen
+  exact ⟨node, hnode, hdesc, hruns, hexact, huniform, hclosed⟩
+
 end
 
 end Compression
