@@ -483,6 +483,33 @@ def uniformBranchSearchTimeTerms (payloadBound : Nat) : List Nat → List Nat
       let tail := uniformBranchSearchTimeTerms payloadBound ts
       a * (t + 1) :: tail.map (fun n => a * n)
 
+/-- Exact per-step exponent contributed by one Section 4 autoencoder payload. This is the
+current-model replacement for the paper term `l(f_i) + l(f_i') + O(1)`. -/
+def autoencoderStepExponent (g f : Program) : Nat :=
+  BitString.blen g + BitString.blen f +
+    (2 * BitString.blen (BitString.ofNatExact (BitString.blen g)) + 2)
+
+@[simp] theorem autoencoderStepExponent_eq_payload (g f : Program) :
+    autoencoderStepExponent g f = BitString.blen (autoencoderPayload g f) + 1 := by
+  rw [autoencoderPayload, BitString.blen_exactPairPayload]
+  unfold autoencoderStepExponent
+  omega
+
+/-- Cumulative payload exponents along a branch. The `i`-th entry is the sum of the current-model
+payload exponents through step `i`. -/
+def branchSearchTimeExponents : List Program → List Program → List Nat
+  | [], [] => []
+  | f :: fs, g :: gs =>
+      let a := autoencoderStepExponent g f
+      let tail := branchSearchTimeExponents fs gs
+      a :: tail.map (fun n => a + n)
+  | _, _ => []
+
+/-- Exact weighted local terms attached to `branchSearchTimeBound`. This makes the cumulative
+payload exponents explicit, giving the current-form analogue of the paper's weighted sum. -/
+def branchSearchTimeExplicitTerms (fs gs : List Program) (localWork : List Nat) : List Nat :=
+  List.zipWith (fun t e => 2 ^ e * (t + 1)) localWork (branchSearchTimeExponents fs gs)
+
 theorem branchSearchTimeBound_eq_sum_terms
     (fs gs : List Program) (localWork : List Nat) :
     branchSearchTimeBound fs gs localWork = (branchSearchTimeTerms fs gs localWork).sum := by
@@ -515,6 +542,68 @@ theorem uniformBranchSearchTimeBound_eq_sum_terms
       rw [sum_map_mul_left, ih]
       rw [Nat.mul_add, Nat.mul_add, Nat.mul_one, Nat.mul_add, Nat.mul_one]
       ac_rfl
+
+private theorem zipWith_pow_map_add
+    (a : Nat) (ts exps : List Nat) :
+    List.zipWith (fun t e => 2 ^ e * (t + 1)) ts (exps.map (fun n => a + n)) =
+      (List.zipWith (fun t e => 2 ^ e * (t + 1)) ts exps).map (fun n => 2 ^ a * n) := by
+  induction ts generalizing exps with
+  | nil =>
+      cases exps <;> simp
+  | cons t ts ih =>
+      cases exps with
+      | nil =>
+          simp
+      | cons e exps =>
+          simp [List.zipWith, ih]
+          rw [Nat.pow_add]
+          ac_rfl
+
+theorem branchSearchTimeTerms_eq_explicitTerms
+    (fs gs : List Program) (localWork : List Nat) :
+    branchSearchTimeTerms fs gs localWork = branchSearchTimeExplicitTerms fs gs localWork := by
+  induction fs generalizing gs localWork with
+  | nil =>
+      cases gs <;> cases localWork <;>
+        simp [branchSearchTimeTerms, branchSearchTimeExplicitTerms, branchSearchTimeExponents]
+  | cons f fs ih =>
+      cases gs with
+      | nil =>
+          cases localWork <;>
+            simp [branchSearchTimeTerms, branchSearchTimeExplicitTerms, branchSearchTimeExponents]
+      | cons g gs =>
+          cases localWork with
+          | nil =>
+              simp [branchSearchTimeTerms, branchSearchTimeExplicitTerms, branchSearchTimeExponents]
+          | cons t ts =>
+              simp [branchSearchTimeTerms, branchSearchTimeExplicitTerms, branchSearchTimeExponents,
+                autoencoderStepExponent_eq_payload]
+              rw [ih]
+              have hzip :
+                  List.map (fun n => 2 ^ (BitString.blen (autoencoderPayload g f) + 1) * n)
+                      (branchSearchTimeExplicitTerms fs gs ts) =
+                    List.zipWith (fun t e => 2 ^ e * (t + 1)) ts
+                      (List.map (fun n => BitString.blen (autoencoderPayload g f) + 1 + n)
+                        (branchSearchTimeExponents fs gs)) := by
+                calc
+                  List.map (fun n => 2 ^ (BitString.blen (autoencoderPayload g f) + 1) * n)
+                      (branchSearchTimeExplicitTerms fs gs ts) =
+                      List.map (fun n => 2 ^ (BitString.blen (autoencoderPayload g f) + 1) * n)
+                        (List.zipWith (fun t e => 2 ^ e * (t + 1)) ts
+                          (branchSearchTimeExponents fs gs)) := by
+                    rfl
+                  _ = List.zipWith (fun t e => 2 ^ e * (t + 1)) ts
+                        (List.map (fun n => BitString.blen (autoencoderPayload g f) + 1 + n)
+                          (branchSearchTimeExponents fs gs)) := by
+                    simpa [autoencoderStepExponent_eq_payload] using
+                      (zipWith_pow_map_add (a := autoencoderStepExponent g f)
+                        (ts := ts) (exps := branchSearchTimeExponents fs gs)).symm
+              exact hzip
+
+theorem branchSearchTimeBound_eq_sum_explicitTerms
+    (fs gs : List Program) (localWork : List Nat) :
+    branchSearchTimeBound fs gs localWork = (branchSearchTimeExplicitTerms fs gs localWork).sum := by
+  rw [branchSearchTimeBound_eq_sum_terms, branchSearchTimeTerms_eq_explicitTerms]
 
 theorem branchSearchTimeBound_le_uniform
     {payloadBound : Nat} {fs gs : List Program} {localWork : List Nat}
@@ -599,6 +688,26 @@ theorem theorem41_runtimeReduction_weighted
   refine ⟨node, hnode, hdesc, hruns, ?_⟩
   rw [← branchSearchTimeBound_eq_sum_terms, ← uniformBranchSearchTimeBound_eq_sum_terms]
   exact hbound
+
+/-- Paper-shape current-form runtime reduction for Theorem 4.1. The search time is written as an
+explicit weighted sum whose `i`-th exponent is the cumulative payload cost
+`∑_{k ≤ i} autoencoderStepExponent g_k f_k`, then compared to the uniform weighted bound. -/
+theorem theorem41_runtimeReduction_explicit
+    {b : Nat} {x rs : Program} {fs gs : List Program} {localWork : List Nat}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs)
+    (hlen : fs.length = localWork.length) :
+    ∃ node, IsAliceBranch x node ∧ node.description = schemeDescription rs fs ∧
+      runs schemeDescriptionInterpreter node.description x ∧
+      branchSearchTimeBound fs gs localWork =
+        (branchSearchTimeExplicitTerms fs gs localWork).sum ∧
+      (branchSearchTimeExplicitTerms fs gs localWork).sum ≤
+        (uniformBranchSearchTimeTerms (autoencoderPayloadBound b) localWork).sum := by
+  obtain ⟨node, hnode, hdesc, hruns, hbound⟩ :=
+    theorem41_runtimeReduction_weighted hb hchain hlen
+  refine ⟨node, hnode, hdesc, hruns, ?_, ?_⟩
+  · exact branchSearchTimeBound_eq_sum_explicitTerms fs gs localWork
+  · simpa [branchSearchTimeTerms_eq_explicitTerms] using hbound
 
 /-- Closed-form arithmetic upper bound for the uniform branch recurrence. This is a coarser but
 fully explicit replacement for the nested search-time definition. -/
