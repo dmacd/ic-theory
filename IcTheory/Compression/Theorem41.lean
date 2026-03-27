@@ -392,6 +392,138 @@ theorem theorem41_semantic
   · simpa [AliceNode.description, hres, hfeatures] using
       schemeDescriptionInterpreter_runs_of_incrementalBCompressionScheme hchain
 
+/-- Uniform length bound for any autoencoder payload `g' f` appearing in an incremental
+`b`-compression scheme. This is the Section 4 constant obtained by combining the bounded feature
+length from Theorem 3.7 with the bounded descriptive-map length from Theorem 3.8. -/
+def autoencoderPayloadBound (b : Nat) : Nat :=
+  shortFeatureResidualMapBound (bCompressibleFeatureBound b) +
+    bCompressibleFeatureBound b +
+    (2 * BitString.blen
+      (BitString.ofNat (shortFeatureResidualMapBound (bCompressibleFeatureBound b))) + 1)
+
+theorem autoencoderPayload_length_le_of_bCompressionSchemeStep
+    {b : Nat} {x f g r : Program}
+    (hb : 1 < b)
+    (hbc : BCompressible b x)
+    (hstep : BCompressionSchemeStep b x f g r) :
+    BitString.blen (autoencoderPayload g f) ≤ autoencoderPayloadBound b := by
+  have hf :
+      BitString.blen f ≤ bCompressibleFeatureBound b := by
+    exact theorem37_shortestBFeature hb hbc hstep.shortestFeature
+  have hg :
+      BitString.blen g ≤ shortFeatureResidualMapBound (bCompressibleFeatureBound b) := by
+    exact shortestDescriptiveMap_length_le_of_feature_length_le hstep.shortestMap hf
+  have henc :
+      BitString.blen (BitString.ofNatExact (BitString.blen g)) ≤
+        BitString.blen (BitString.ofNat
+          (shortFeatureResidualMapBound (bCompressibleFeatureBound b))) := by
+    exact le_trans
+      (BitString.blen_ofNatExact_le_ofNat (BitString.blen g))
+      (BitString.blen_ofNat_mono hg)
+  rw [autoencoderPayload, BitString.blen_exactPairPayload]
+  unfold autoencoderPayloadBound
+  omega
+
+theorem autoencoderPayloads_bounded_of_incrementalBCompressionScheme
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    List.Forall₂
+      (fun f g => BitString.blen (autoencoderPayload g f) ≤ autoencoderPayloadBound b)
+      fs gs := by
+  induction hchain with
+  | stop_small =>
+      simp
+  | stop_incompressible =>
+      simp
+  | @cons x f g r rs fs gs hbig hbc hstep hrest ih =>
+      exact List.Forall₂.cons
+        (autoencoderPayload_length_le_of_bCompressionSchemeStep hb hbc hstep)
+        ih
+
+/-- Nested runtime recurrence obtained by applying Lemma 4.1 step-by-step to a branch with
+possibly varying payload lengths. The list `localWork` represents the non-recursive work done at
+each node, such as computing `g_i` and `f_i` on that step. -/
+def branchSearchTimeBound : List Program → List Program → List Nat → Nat
+  | [], [], [] => 0
+  | f :: fs, g :: gs, t :: ts =>
+      2 ^ (BitString.blen (autoencoderPayload g f) + 1) *
+        (t + branchSearchTimeBound fs gs ts + 1)
+  | _, _, _ => 0
+
+/-- Uniformized version of `branchSearchTimeBound` where every step uses the same payload-length
+bound `payloadBound`. -/
+def uniformBranchSearchTimeBound (payloadBound : Nat) : List Nat → Nat
+  | [] => 0
+  | t :: ts =>
+      2 ^ (payloadBound + 1) * (t + uniformBranchSearchTimeBound payloadBound ts + 1)
+
+theorem branchSearchTimeBound_le_uniform
+    {payloadBound : Nat} {fs gs : List Program} {localWork : List Nat}
+    (hpayload :
+      List.Forall₂
+        (fun f g => BitString.blen (autoencoderPayload g f) ≤ payloadBound)
+        fs gs)
+    (hlen : fs.length = localWork.length) :
+    branchSearchTimeBound fs gs localWork ≤
+      uniformBranchSearchTimeBound payloadBound localWork := by
+  induction hpayload generalizing localWork with
+  | nil =>
+      cases localWork with
+      | nil =>
+          simp [branchSearchTimeBound, uniformBranchSearchTimeBound]
+      | cons t ts =>
+          simp at hlen
+  | @cons f g fs gs hfg hrest ih =>
+      cases localWork with
+      | nil =>
+          simp at hlen
+      | cons t ts =>
+          have hrestLen : fs.length = ts.length := by
+            simpa using Nat.succ.inj hlen
+          have hrestBound := ih hrestLen
+          have hinner :
+              t + branchSearchTimeBound fs gs ts + 1 ≤
+                t + uniformBranchSearchTimeBound payloadBound ts + 1 := by
+            omega
+          have hpow :
+              2 ^ (BitString.blen (autoencoderPayload g f) + 1) ≤
+                2 ^ (payloadBound + 1) := by
+            exact Nat.pow_le_pow_right (by decide) (by omega)
+          calc
+            branchSearchTimeBound (f :: fs) (g :: gs) (t :: ts) =
+                2 ^ (BitString.blen (autoencoderPayload g f) + 1) *
+                  (t + branchSearchTimeBound fs gs ts + 1) := by
+              simp [branchSearchTimeBound]
+            _ ≤ 2 ^ (BitString.blen (autoencoderPayload g f) + 1) *
+                  (t + uniformBranchSearchTimeBound payloadBound ts + 1) := by
+              exact Nat.mul_le_mul_left _ hinner
+            _ ≤ 2 ^ (payloadBound + 1) *
+                  (t + uniformBranchSearchTimeBound payloadBound ts + 1) := by
+              simpa [Nat.mul_comm] using
+                (Nat.mul_le_mul_right
+                  (t + uniformBranchSearchTimeBound payloadBound ts + 1) hpow)
+            _ = uniformBranchSearchTimeBound payloadBound (t :: ts) := by
+              simp [uniformBranchSearchTimeBound]
+
+/-- Current-form runtime reduction for Theorem 4.1: after collapsing all branch payload lengths
+to the constant `autoencoderPayloadBound b`, the search cost of any incremental `b`-compression
+scheme is bounded by a uniform Lemma 4.1 recurrence on the supplied local step costs. -/
+theorem theorem41_runtimeReduction
+    {b : Nat} {x rs : Program} {fs gs : List Program} {localWork : List Nat}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs)
+    (hlen : fs.length = localWork.length) :
+    ∃ node, IsAliceBranch x node ∧ node.description = schemeDescription rs fs ∧
+      runs schemeDescriptionInterpreter node.description x ∧
+      branchSearchTimeBound fs gs localWork ≤
+        uniformBranchSearchTimeBound (autoencoderPayloadBound b) localWork := by
+  obtain ⟨node, hnode, hfeatures, hdesc, hruns⟩ := theorem41_semantic hchain
+  refine ⟨node, hnode, hdesc, hruns, ?_⟩
+  exact branchSearchTimeBound_le_uniform
+    (autoencoderPayloads_bounded_of_incrementalBCompressionScheme hb hchain)
+    hlen
+
 end
 
 end Compression
