@@ -13,3 +13,4 @@ import IcTheory.Compression.Theorem35
 import IcTheory.Compression.BFeatures
 import IcTheory.Compression.Theorem37
 import IcTheory.Compression.Theorem38
+import IcTheory.Compression.Theorem39
