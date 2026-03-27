@@ -208,6 +208,12 @@ structure BCompressionSchemeStep (b : Nat) (x f g r : Program) : Prop where
   compression : CompressionCondition f r x
   residualBound : ResidualBoundByFactor b r x
 
+/-- One-step plain-complexity transport for short descriptive maps. This isolates the only
+remaining machine-level ingredient needed for the exact upper side of Theorem 3.9 in the current
+formalization. -/
+def ComplexityStepBound (k c : Nat) : Prop :=
+  ∀ {x r g : Program}, runs g x r → BitString.blen g ≤ k → Complexity r ≤ Complexity x + c
+
 /-- Inductive model of the Section 3.5 compression scheme. The lists are ordered as
 `f₁, ..., fₛ` and `g₁, ..., gₛ`. The scheme stops once the current residual is either small or no
 longer `b`-compressible. -/
@@ -295,7 +301,39 @@ theorem incrementalBCompressionScheme_maps_bounded
       | nil =>
           simpa [List.Forall] using hg
       | cons g' gs' =>
-          simpa [List.Forall, hg] using ih
+        simpa [List.Forall, hg] using ih
+
+/-- If every descriptive map of length at most `k` increases plain complexity by at most `c`,
+then the terminal residual of the incremental `b`-compression scheme differs from `x` by at most
+`fs.length * c` in plain complexity. This is the exact reduction used in the proof of Theorem
+3.9. -/
+theorem complexity_le_of_incrementalBCompressionScheme_of_stepBound
+    {b : Nat} {x rs : Program} {fs gs : List Program} {c : Nat}
+    (hb : 1 < b)
+    (hstepC : ComplexityStepBound
+      (shortFeatureResidualMapBound (bCompressibleFeatureBound b)) c)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    Complexity rs ≤ Complexity x + fs.length * c := by
+  induction hchain with
+  | stop_small =>
+      simp
+  | stop_incompressible =>
+      simp
+  | @cons x f g r rs fs gs _ hbc hstep hrest ih =>
+      have hf :
+          BitString.blen f ≤ bCompressibleFeatureBound b := by
+        exact theorem37_shortestBFeature hb hbc hstep.shortestFeature
+      have hg :
+          BitString.blen g ≤ shortFeatureResidualMapBound (bCompressibleFeatureBound b) := by
+        exact shortestDescriptiveMap_length_le_of_feature_length_le hstep.shortestMap hf
+      have hr :
+          Complexity r ≤ Complexity x + c := hstepC hstep.mapRuns hg
+      have hrs :
+          Complexity rs ≤ Complexity r + fs.length * c := ih
+      have hrs' :
+          Complexity rs ≤ Complexity x + c + fs.length * c := by
+        omega
+      simpa [Nat.succ_mul, Nat.add_assoc, Nat.add_left_comm, Nat.add_comm] using hrs'
 
 private theorem pow_pred_le_length_of_nonemptyScheme
     {b : Nat} {x rs : Program} {fs gs : List Program}
@@ -363,6 +401,60 @@ theorem incrementalBCompressionScheme_length_le_log
     have hlog : fs.length - 1 ≤ Nat.log b (BitString.blen x) := by
       exact (Nat.le_log_iff_pow_le hb hxne).2 hpow
     omega
+
+private theorem length_le_of_not_bCompressible
+    {b : Nat} {x : Program}
+    (hb : 1 < b)
+    (hnot : ¬ BCompressible b x) :
+    BitString.blen x ≤ b * Complexity x + (b - 1) := by
+  have hb0 : 0 < b := Nat.zero_lt_of_lt hb
+  have hq : BitString.blen x / b < Complexity x := lt_of_not_ge hnot
+  have hmod : BitString.blen x % b < b := Nat.mod_lt _ hb0
+  have hlt : BitString.blen x < b * Complexity x + b := by
+    calc
+      BitString.blen x = (BitString.blen x / b) * b + BitString.blen x % b := by
+        rw [Nat.mul_comm]
+        exact (Nat.div_add_mod (BitString.blen x) b).symm
+      _ < Complexity x * b + b := by
+        have hmul : (BitString.blen x / b) * b < Complexity x * b := by
+          exact Nat.mul_lt_mul_of_pos_right hq hb0
+        omega
+      _ = b * Complexity x + b := by
+        rw [Nat.mul_comm]
+  omega
+
+private theorem residual_length_le_of_incrementalBCompressionScheme_of_stepBound
+    {b : Nat} {x rs : Program} {fs gs : List Program} {c : Nat}
+    (hb : 1 < b)
+    (hstepC : ComplexityStepBound
+      (shortFeatureResidualMapBound (bCompressibleFeatureBound b)) c)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    BitString.blen rs ≤
+      b * (Complexity x + (Nat.log b (BitString.blen x) + 1) * c) +
+        bCompressionCutoff b + (b - 1) := by
+  have hcomplexBase :
+      Complexity rs ≤ Complexity x + fs.length * c :=
+    complexity_le_of_incrementalBCompressionScheme_of_stepBound hb hstepC hchain
+  have hsteps : fs.length ≤ Nat.log b (BitString.blen x) + 1 :=
+    incrementalBCompressionScheme_length_le_log hb hchain
+  have hstepsMul : fs.length * c ≤ (Nat.log b (BitString.blen x) + 1) * c := by
+    exact Nat.mul_le_mul_right c hsteps
+  have hcomplex :
+      Complexity rs ≤ Complexity x + (Nat.log b (BitString.blen x) + 1) * c := by
+    calc
+      Complexity rs ≤ Complexity x + fs.length * c := hcomplexBase
+      _ ≤ Complexity x + (Nat.log b (BitString.blen x) + 1) * c := by
+        exact Nat.add_le_add_left hstepsMul _
+  cases incrementalBCompressionScheme_terminal hchain with
+  | inl hsmall =>
+      omega
+  | inr hnot =>
+      have hrs : BitString.blen rs ≤ b * Complexity rs + (b - 1) :=
+        length_le_of_not_bCompressible hb hnot
+      have htransport :
+          b * Complexity rs ≤ b * (Complexity x + (Nat.log b (BitString.blen x) + 1) * c) := by
+        exact Nat.mul_le_mul_left b hcomplex
+      omega
 
 /-- Concrete size bound for the Section 3.5 description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`.
 
@@ -929,6 +1021,47 @@ theorem theorem39_eq51
     intro f hf
     exact theorem39_eq49 hb hchain hf
   exact schemeDescription_logLe_terminalResidual_of_mem_bound hfs
+
+/-- Exact upper side of Theorem 3.9, reduced to the single missing machine-level ingredient:
+a uniform one-step plain-complexity bound for short descriptive maps. -/
+theorem theorem39_eq48_upper_of_stepBound
+    {b : Nat} {x rs : Program} {fs gs : List Program} {c : Nat}
+    (hb : 1 < b)
+    (hstepC : ComplexityStepBound
+      (shortFeatureResidualMapBound (bCompressibleFeatureBound b)) c)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    let steps := Nat.log b (BitString.blen x) + 1
+    let n :=
+      b * (Complexity x + steps * c) + bCompressionCutoff b + (b - 1)
+    BitString.blen (schemeDescription rs fs) ≤
+      n +
+        steps * schemeDescriptionFeatureCost (bCompressibleFeatureBound b) +
+        (2 * BitString.blen (BitString.ofNat n) + 1) +
+        (3 * BitString.blen (BitString.ofNat steps) + 1) := by
+  let steps := Nat.log b (BitString.blen x) + 1
+  let n :=
+    b * (Complexity x + steps * c) + bCompressionCutoff b + (b - 1)
+  have hbase := theorem39_eq48_upper_current hb hchain
+  have hrs : BitString.blen rs ≤ n := by
+    simpa [steps, n] using
+      residual_length_le_of_incrementalBCompressionScheme_of_stepBound hb hstepC hchain
+  have hmono :
+      BitString.blen (BitString.ofNat (BitString.blen rs)) ≤
+        BitString.blen (BitString.ofNat n) := by
+    exact BitString.blen_ofNat_mono hrs
+  calc
+    BitString.blen (schemeDescription rs fs) ≤
+        BitString.blen rs +
+          steps * schemeDescriptionFeatureCost (bCompressibleFeatureBound b) +
+          (2 * BitString.blen (BitString.ofNat (BitString.blen rs)) + 1) +
+          (3 * BitString.blen (BitString.ofNat steps) + 1) := by
+      simpa [steps] using hbase
+    _ ≤
+        n +
+          steps * schemeDescriptionFeatureCost (bCompressibleFeatureBound b) +
+          (2 * BitString.blen (BitString.ofNat n) + 1) +
+          (3 * BitString.blen (BitString.ofNat steps) + 1) := by
+      omega
 
 /-- Current-form Theorem 3.9: the concrete description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`
 now has explicit lower and upper prefix-complexity bounds, its raw length satisfies the
