@@ -179,6 +179,134 @@ theorem pow_le_nodeBudgetUntil {a : Program} {i : Nat}
         exact Nat.pow_le_pow_right (by decide) (by omega)
   omega
 
+/-- Abstract prefix-style phase-mass hypothesis used in the paper's Lemma 4.1 proof. The
+upper bound is the Kraft-type `2^(n+1)` estimate, while the lower bound records the contribution
+of the shortest codeword `amin`. -/
+structure PrefixPhaseModel (total : Nat → Nat) (amin : Nat) : Prop where
+  upper : ∀ n, total n ≤ 2 ^ (n + 1)
+  lower : ∀ {n}, amin ≤ n → 2 ^ (n - amin) ≤ total n
+
+/-- `NodeBudgetWitness a τ n` means phase `n + 1` is the first phase by which the current
+schedule has allocated at least `τ` steps to node `a`. -/
+def NodeBudgetWitness (a : Program) (τ n : Nat) : Prop :=
+  nodeBudgetUntil a n < τ ∧ τ ≤ nodeBudgetUntil a (n + 1)
+
+theorem nodeBudgetWitness_pos {a : Program} {τ n : Nat}
+    (hw : NodeBudgetWitness a τ n) :
+    0 < τ := by
+  exact lt_of_le_of_lt (Nat.zero_le _) hw.1
+
+theorem length_le_of_nodeBudgetWitness {a : Program} {τ n : Nat}
+    (hw : NodeBudgetWitness a τ n) :
+    BitString.blen a ≤ n := by
+  by_contra hlen
+  have hphase0 : nodeBudgetUntil a (n + 1) = 0 := by
+    exact nodeBudgetUntil_eq_zero_of_le (a := a) (i := n + 1) (by omega)
+  have hτle : τ ≤ 0 := by
+    simpa [hphase0] using hw.2
+  have hτ0 : τ = 0 := le_antisymm hτle (Nat.zero_le _)
+  exact (Nat.ne_of_gt (nodeBudgetWitness_pos hw)) hτ0
+
+theorem nodeBudgetWitness_pow_le_succ {a : Program} {τ n : Nat}
+    (hw : NodeBudgetWitness a τ n) :
+    2 ^ (n - BitString.blen a + 1) ≤ τ + 1 := by
+  have hlen : BitString.blen a ≤ n := length_le_of_nodeBudgetWitness hw
+  rcases eq_or_lt_of_le hlen with rfl | hlt
+  · have hzero : nodeBudgetUntil a (BitString.blen a) = 0 :=
+        nodeBudgetUntil_eq_zero_of_le (a := a) (i := BitString.blen a) le_rfl
+    have hτ0 : 0 < τ := by
+      simpa [hzero] using hw.1
+    have hτ1 : 1 ≤ τ := Nat.succ_le_of_lt hτ0
+    simpa using Nat.succ_le_succ hτ1
+  · have hclosed : nodeBudgetUntil a n = 2 ^ (n - BitString.blen a + 1) - 2 :=
+      nodeBudgetUntil_eq_of_lt hlt
+    have hlt' : 2 ^ (n - BitString.blen a + 1) - 2 < τ := by
+      simpa [hclosed] using hw.1
+    omega
+
+/-- Abstract upper half of the paper's Lemma 4.1, reduced to the prefix-style phase-mass model.
+Because the current concrete phase indexing starts giving a node two steps at its first active
+phase, the clean bound comes out as `2^(|a|+1) * (τ + 1)`. -/
+theorem lemma41_upper_of_prefixPhaseModel
+    {total : Nat → Nat} {amin : Nat} {a : Program} {τ n : Nat}
+    (hmodel : PrefixPhaseModel total amin)
+    (hw : NodeBudgetWitness a τ n) :
+    total (n + 1) ≤ 2 ^ (BitString.blen a + 1) * (τ + 1) := by
+  have hupper := hmodel.upper (n + 1)
+  have hlen : BitString.blen a ≤ n := length_le_of_nodeBudgetWitness hw
+  have hpow : 2 ^ (n - BitString.blen a + 1) ≤ τ + 1 :=
+    nodeBudgetWitness_pow_le_succ hw
+  calc
+    total (n + 1) ≤ 2 ^ (n + 2) := by
+      simpa using hupper
+    _ = 2 ^ (BitString.blen a + 1) * 2 ^ (n - BitString.blen a + 1) := by
+      have hexp : n + 2 = BitString.blen a + 1 + (n - BitString.blen a + 1) := by
+        omega
+      rw [hexp, Nat.pow_add]
+    _ ≤ 2 ^ (BitString.blen a + 1) * (τ + 1) := by
+      exact Nat.mul_le_mul_left _ hpow
+
+/-- Abstract lower half of the paper's Lemma 4.1 with the fractional `2^{-1}` factor cleared:
+`2^(|a|-|amin|) * τ < 2 * T`. This avoids leaving the natural-number setting while keeping the
+same content as the paper bound. -/
+theorem lemma41_lower_of_prefixPhaseModel
+    {total : Nat → Nat} {amin : Nat} {a : Program} {τ n : Nat}
+    (hmodel : PrefixPhaseModel total amin)
+    (hmin : amin ≤ BitString.blen a)
+    (hw : NodeBudgetWitness a τ n) :
+    2 ^ (BitString.blen a - amin) * τ < 2 * total (n + 1) := by
+  have hlen : BitString.blen a ≤ n := length_le_of_nodeBudgetWitness hw
+  rcases hw with ⟨hwPrev, hwNext⟩
+  have hlt : BitString.blen a < n + 1 := by omega
+  have hnode : nodeBudgetUntil a (n + 1) = 2 ^ (n + 1 - BitString.blen a + 1) - 2 :=
+    nodeBudgetUntil_eq_of_lt hlt
+  have hτpow : τ < 2 ^ (n + 1 - BitString.blen a + 1) := by
+    rw [hnode] at hwNext
+    omega
+  have hmul :
+      2 ^ (BitString.blen a - amin) * τ <
+        2 ^ (BitString.blen a - amin) * 2 ^ (n + 1 - BitString.blen a + 1) := by
+    exact Nat.mul_lt_mul_of_pos_left hτpow (pow_pos (show 0 < 2 by decide) _)
+  have hphaseLower : 2 ^ (n + 1 - amin) ≤ total (n + 1) :=
+    hmodel.lower (n := n + 1) (by omega)
+  have hscale :
+      2 ^ (BitString.blen a - amin) * 2 ^ (n + 1 - BitString.blen a + 1) ≤ 2 * total (n + 1) := by
+    calc
+      2 ^ (BitString.blen a - amin) * 2 ^ (n + 1 - BitString.blen a + 1) =
+          2 ^ (n + 1 - amin) * 2 := by
+        rw [← Nat.pow_add]
+        have hexp :
+            BitString.blen a - amin + (n + 1 - BitString.blen a + 1) = n + 1 - amin + 1 := by
+          omega
+        rw [hexp, Nat.pow_succ]
+      _ ≤ total (n + 1) * 2 := by
+        exact Nat.mul_le_mul_right 2 hphaseLower
+      _ = 2 * total (n + 1) := by rw [Nat.mul_comm]
+  exact lt_of_lt_of_le hmul hscale
+
+/-- Packaged current-form version of Lemma 4.1 under the abstract prefix-style phase model. -/
+theorem lemma41_of_prefixPhaseModel
+    {total : Nat → Nat} {amin : Nat} {a : Program} {τ n : Nat}
+    (hmodel : PrefixPhaseModel total amin)
+    (hmin : amin ≤ BitString.blen a)
+    (hw : NodeBudgetWitness a τ n) :
+    total (n + 1) ≤ 2 ^ (BitString.blen a + 1) * (τ + 1) ∧
+      2 ^ (BitString.blen a - amin) * τ < 2 * total (n + 1) := by
+  exact ⟨
+    lemma41_upper_of_prefixPhaseModel hmodel hw,
+    lemma41_lower_of_prefixPhaseModel hmodel hmin hw
+  ⟩
+
+/-- The current concrete Section 4 schedule is not yet the paper's prefix-code schedule: its
+total phase mass grows like `n * 2^n`, so it violates the prefix-style upper bound already at
+phase `3`. -/
+theorem not_prefixPhaseModel_phaseTotalBudget (amin : Nat) :
+    ¬ PrefixPhaseModel phaseTotalBudget amin := by
+  intro hmodel
+  have hupper := hmodel.upper 3
+  rw [phaseTotalBudget_eq] at hupper
+  norm_num at hupper
+
 end
 
 end Compression
