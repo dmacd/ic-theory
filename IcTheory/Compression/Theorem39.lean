@@ -10,6 +10,158 @@ open UniversalMachine
 
 noncomputable section
 
+/-- Self-delimiting list payload used for the concrete Section 3.5 description object. The list
+elements are encoded in order, leaving the final `tail` untouched. -/
+def exactProgramListPayload : List Program → Program → Program
+  | [], tail => tail
+  | f :: fs, tail => BitString.exactPairPayload f (exactProgramListPayload fs tail)
+
+/-- Decode the first `n` entries of an `exactProgramListPayload`, returning the decoded list
+and the remaining tail. -/
+def decodeProgramListPayload : Nat → Program → List Program × Program
+  | 0, payload => ([], payload)
+  | n + 1, payload =>
+      let headTail := BitString.decodeExactPairPayload payload
+      let rest := decodeProgramListPayload n headTail.2
+      (headTail.1 :: rest.1, rest.2)
+
+/-- Concrete Section 3.5 description object
+`D_s = ⟨s, r_s, f_s, ..., f_1⟩`.
+
+The list `fs` in the scheme is ordered as `f₁, ..., fₛ`, so the stored payload uses
+`fs.reverse = [fₛ, ..., f₁]` to match the paper's notation. -/
+def schemeDescription (rs : Program) (fs : List Program) : Program :=
+  BitString.exactPairPayload
+    (BitString.ofNatExact fs.length)
+    (BitString.exactPairPayload rs (exactProgramListPayload fs.reverse []))
+
+/-- Pure decoder for `schemeDescription`, exposing the stored step count, terminal residual,
+reversed feature list, and leftover tail. -/
+def decodeSchemeDescription (payload : Program) : Nat × Program × List Program × Program :=
+  let outer := BitString.decodeExactPairPayload payload
+  let body := BitString.decodeExactPairPayload outer.2
+  let decodedFs := decodeProgramListPayload (BitString.toNatExact outer.1) body.2
+  (BitString.toNatExact outer.1, body.1, decodedFs.1, decodedFs.2)
+
+@[simp] theorem decodeProgramListPayload_zero (payload : Program) :
+    decodeProgramListPayload 0 payload = ([], payload) := rfl
+
+@[simp] theorem decodeProgramListPayload_succ (n : Nat) (payload : Program) :
+    decodeProgramListPayload (n + 1) payload =
+      let headTail := BitString.decodeExactPairPayload payload
+      let rest := decodeProgramListPayload n headTail.2
+      (headTail.1 :: rest.1, rest.2) := rfl
+
+@[simp] theorem decodeProgramListPayload_exactProgramListPayload
+    (fs : List Program) (tail : Program) :
+    decodeProgramListPayload fs.length (exactProgramListPayload fs tail) = (fs, tail) := by
+  induction fs generalizing tail with
+  | nil =>
+      simp [exactProgramListPayload]
+  | cons f fs ih =>
+      simp [exactProgramListPayload, ih]
+
+@[simp] theorem decodeSchemeDescription_schemeDescription
+    (rs : Program) (fs : List Program) :
+    decodeSchemeDescription (schemeDescription rs fs) = (fs.length, rs, fs.reverse, []) := by
+  unfold decodeSchemeDescription schemeDescription
+  simp
+  have hdecode :
+      decodeProgramListPayload (fs.reverse.length) (exactProgramListPayload fs.reverse []) =
+        (fs.reverse, []) :=
+    decodeProgramListPayload_exactProgramListPayload (fs := fs.reverse) (tail := ([] : Program))
+  simpa using hdecode
+
+/-- Exact per-feature contribution to the concrete `D_s` encoding, up to the project-standard
+binary length bound on the self-delimiting header. -/
+def schemeDescriptionFeatureCost (n : Nat) : Nat :=
+  n + (2 * BitString.blen (BitString.ofNat n) + 1)
+
+@[simp] theorem exactProgramListPayload_nil (tail : Program) :
+    exactProgramListPayload [] tail = tail := rfl
+
+@[simp] theorem exactProgramListPayload_cons (f : Program) (fs : List Program) (tail : Program) :
+    exactProgramListPayload (f :: fs) tail =
+      BitString.exactPairPayload f (exactProgramListPayload fs tail) := rfl
+
+private theorem exactProgramListPayload_length_le_of_mem_bound
+    {fs : List Program} {tail : Program} {n : Nat}
+    (hfs : ∀ f ∈ fs, BitString.blen f ≤ n) :
+    BitString.blen (exactProgramListPayload fs tail) ≤
+      BitString.blen tail + fs.length * schemeDescriptionFeatureCost n := by
+  induction fs generalizing tail with
+  | nil =>
+      simp [exactProgramListPayload, schemeDescriptionFeatureCost]
+  | cons f fs ih =>
+      have hf : BitString.blen f ≤ n := hfs f (by simp)
+      have hrest :
+          BitString.blen (exactProgramListPayload fs tail) ≤
+            BitString.blen tail + fs.length * schemeDescriptionFeatureCost n := by
+        exact ih (fun g hg => hfs g (by simp [hg]))
+      have hhead :
+          BitString.blen (BitString.ofNatExact (BitString.blen f)) ≤
+            BitString.blen (BitString.ofNat n) := by
+        exact le_trans
+          (BitString.blen_ofNatExact_le_ofNat (BitString.blen f))
+          (BitString.blen_ofNat_mono hf)
+      calc
+        BitString.blen (exactProgramListPayload (f :: fs) tail) =
+            BitString.blen f + BitString.blen (exactProgramListPayload fs tail) +
+              (2 * BitString.blen (BitString.ofNatExact (BitString.blen f)) + 1) := by
+          rw [exactProgramListPayload_cons, BitString.blen_exactPairPayload]
+        _ ≤ n + (BitString.blen tail + fs.length * schemeDescriptionFeatureCost n) +
+              (2 * BitString.blen (BitString.ofNat n) + 1) := by
+          omega
+        _ = BitString.blen tail + (f :: fs).length * schemeDescriptionFeatureCost n := by
+          simp [schemeDescriptionFeatureCost, Nat.succ_mul, Nat.add_assoc, Nat.add_left_comm,
+            Nat.add_comm]
+
+/-- Explicit length bound for the concrete `D_s` encoding, assuming a uniform bound `n` on all
+stored features. -/
+theorem schemeDescription_length_le_of_mem_bound
+    {rs : Program} {fs : List Program} {n : Nat}
+    (hfs : ∀ f ∈ fs, BitString.blen f ≤ n) :
+    BitString.blen (schemeDescription rs fs) ≤
+      BitString.blen rs +
+        fs.length * schemeDescriptionFeatureCost n +
+        (2 * BitString.blen (BitString.ofNat (BitString.blen rs)) + 1) +
+        (3 * BitString.blen (BitString.ofNat fs.length) + 1) := by
+  have hrev :
+      ∀ f ∈ fs.reverse, BitString.blen f ≤ n := by
+    intro f hf
+    exact hfs f ((List.mem_reverse).mp hf)
+  have hpayload :
+      BitString.blen (exactProgramListPayload fs.reverse []) ≤
+        fs.reverse.length * schemeDescriptionFeatureCost n := by
+    simpa using
+      (exactProgramListPayload_length_le_of_mem_bound
+        (fs := fs.reverse) (tail := ([] : Program)) hrev)
+  have hrs :
+      BitString.blen (BitString.ofNatExact (BitString.blen rs)) ≤
+        BitString.blen (BitString.ofNat (BitString.blen rs)) := by
+    exact BitString.blen_ofNatExact_le_ofNat (BitString.blen rs)
+  have hcount :
+      BitString.blen (BitString.ofNatExact fs.length) ≤
+        BitString.blen (BitString.ofNat fs.length) := by
+    exact BitString.blen_ofNatExact_le_ofNat fs.length
+  have hlenBits :
+      BitString.blen (BitString.ofNatExact (BitString.blen (BitString.ofNatExact fs.length))) ≤
+        BitString.blen (BitString.ofNat fs.length) := by
+    have h₁ :
+        BitString.blen (BitString.ofNatExact (BitString.blen (BitString.ofNatExact fs.length))) ≤
+          BitString.blen (BitString.ofNat (BitString.blen (BitString.ofNatExact fs.length))) := by
+      exact BitString.blen_ofNatExact_le_ofNat _
+    have h₂ :
+        BitString.blen (BitString.ofNat (BitString.blen (BitString.ofNatExact fs.length))) ≤
+          BitString.blen (BitString.ofNat fs.length) := by
+      refine le_trans (BitString.blen_ofNat_le_self _) ?_
+      exact BitString.blen_ofNatExact_le_ofNat fs.length
+    exact le_trans h₁ h₂
+  unfold schemeDescription
+  rw [BitString.blen_exactPairPayload, BitString.blen_exactPairPayload]
+  simp at hpayload
+  omega
+
 /-- Current formalization-level cutoff for terminating the `b`-compressible compression scheme.
 It is the natural constant obtained by combining the `b`-feature bound from Theorem 3.7 with the
 `|r| ≤ |x| / b` shrinkage built into `b`-descriptive maps. -/
@@ -182,13 +334,55 @@ theorem incrementalBCompressionScheme_length_le_log
       exact (Nat.le_log_iff_pow_le hb hxne).2 hpow
     omega
 
+/-- Concrete size bound for the Section 3.5 description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`.
+
+This packages the exact self-delimiting encoding length in terms of the terminal residual, the
+uniform per-feature constant from Theorem 3.7, and the logarithmic step-count bound. -/
+theorem schemeDescription_length_le_of_incrementalBCompressionScheme
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    BitString.blen (schemeDescription rs fs) ≤
+      BitString.blen rs +
+        (Nat.log b (BitString.blen x) + 1) *
+          schemeDescriptionFeatureCost (bCompressibleFeatureBound b) +
+        (2 * BitString.blen (BitString.ofNat (BitString.blen rs)) + 1) +
+        (3 * BitString.blen (BitString.ofNat (Nat.log b (BitString.blen x) + 1)) + 1) := by
+  have hfs :
+      ∀ f ∈ fs, BitString.blen f ≤ bCompressibleFeatureBound b := by
+    intro f hf
+    have hall := incrementalBCompressionScheme_features_bounded hb hchain
+    exact (List.forall_iff_forall_mem.mp hall) f hf
+  have hbase :
+      BitString.blen (schemeDescription rs fs) ≤
+        BitString.blen rs +
+          fs.length * schemeDescriptionFeatureCost (bCompressibleFeatureBound b) +
+          (2 * BitString.blen (BitString.ofNat (BitString.blen rs)) + 1) +
+          (3 * BitString.blen (BitString.ofNat fs.length) + 1) := by
+    exact schemeDescription_length_le_of_mem_bound hfs
+  have hlen : fs.length ≤ Nat.log b (BitString.blen x) + 1 :=
+    incrementalBCompressionScheme_length_le_log hb hchain
+  have hmono :
+      BitString.blen (BitString.ofNat fs.length) ≤
+        BitString.blen (BitString.ofNat (Nat.log b (BitString.blen x) + 1)) := by
+    exact BitString.blen_ofNat_mono hlen
+  have hmul :
+      fs.length * schemeDescriptionFeatureCost (bCompressibleFeatureBound b) ≤
+        (Nat.log b (BitString.blen x) + 1) *
+          schemeDescriptionFeatureCost (bCompressibleFeatureBound b) := by
+    exact Nat.mul_le_mul_right _ hlen
+  have hhead :
+      3 * BitString.blen (BitString.ofNat fs.length) + 1 ≤
+        3 * BitString.blen (BitString.ofNat (Nat.log b (BitString.blen x) + 1)) + 1 := by
+    exact Nat.add_le_add_right (Nat.mul_le_mul_left 3 hmono) 1
+  exact le_trans hbase <| by omega
+
 /-- Current-form Theorem 3.9: along the `b`-compressible compression scheme, all selected
 features and descriptive maps are uniformly bounded by constants depending only on `b`, the step
 count is logarithmic in `|x|`, and the terminal residual is either small or no longer
-`b`-compressible.
-
-The paper's explicit `l(D_s)` inequality is deferred until the project has a concrete list-based
-encoding for the final description object `D_s`. -/
+`b`-compressible. The concrete description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩` is now encoded
+as `schemeDescription rs fs`, with its length bounded explicitly in the companion theorem
+`schemeDescription_length_le_of_incrementalBCompressionScheme`. -/
 theorem theorem39
     {b : Nat} {x rs : Program} {fs gs : List Program}
     (hb : 1 < b)
