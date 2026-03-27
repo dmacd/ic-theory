@@ -709,6 +709,37 @@ theorem theorem41_runtimeReduction_explicit
   · exact branchSearchTimeBound_eq_sum_explicitTerms fs gs localWork
   · simpa [branchSearchTimeTerms_eq_explicitTerms] using hbound
 
+/-- Paper-notation wrapper for `theorem41_runtimeReduction_explicit`. Here `featureWork`
+corresponds to the time list `t_i` for computing `f_i (r_i)`, while `mapWork` corresponds to the
+time list `t_i'` for computing `g_i (r_{i-1})`. The current-form weighted bound is then stated on
+their pointwise sum. -/
+theorem theorem41_runtimeReduction_explicit_split
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    {featureWork mapWork : List Nat}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs)
+    (hfeatureLen : fs.length = featureWork.length)
+    (hmapLen : gs.length = mapWork.length) :
+    ∃ node, IsAliceBranch x node ∧ node.description = schemeDescription rs fs ∧
+      runs schemeDescriptionInterpreter node.description x ∧
+      branchSearchTimeBound fs gs (List.zipWith (· + ·) featureWork mapWork) =
+        (branchSearchTimeExplicitTerms fs gs
+          (List.zipWith (· + ·) featureWork mapWork)).sum ∧
+      (branchSearchTimeExplicitTerms fs gs
+          (List.zipWith (· + ·) featureWork mapWork)).sum ≤
+        (uniformBranchSearchTimeTerms (autoencoderPayloadBound b)
+          (List.zipWith (· + ·) featureWork mapWork)).sum := by
+  let localWork := List.zipWith (· + ·) featureWork mapWork
+  have hlen : fs.length = localWork.length := by
+    have hwork : featureWork.length = mapWork.length := by
+      calc
+        featureWork.length = fs.length := by simpa using hfeatureLen.symm
+        _ = gs.length := incrementalBCompressionScheme_lengths_eq hchain
+        _ = mapWork.length := by simpa using hmapLen
+    rw [List.length_zipWith, hfeatureLen]
+    simpa [hwork]
+  simpa [localWork] using theorem41_runtimeReduction_explicit hb hchain hlen
+
 /-- Closed-form arithmetic upper bound for the uniform branch recurrence. This is a coarser but
 fully explicit replacement for the nested search-time definition. -/
 theorem uniformBranchSearchTimeBound_le_closed
