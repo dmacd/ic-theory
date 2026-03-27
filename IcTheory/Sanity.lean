@@ -1,6 +1,7 @@
 import IcTheory.Computability
 import IcTheory.Compression.Section32
 import IcTheory.Compression.Theorem39
+import IcTheory.Compression.Section4
 
 namespace IcTheory
 
@@ -163,6 +164,42 @@ example :
     (schemeDescriptionInterpreter_runs_of_storedPrograms
       (storedFs := []) (r := []) (x := [])
       (RunsStoredProgramList.nil []))
+
+example :
+    decodeAutoencoderPayload
+      (autoencoderPayload (codeToProgram Nat.Partrec.Code.zero) (codeToProgram Nat.Partrec.Code.id)) =
+        (codeToProgram Nat.Partrec.Code.zero, codeToProgram Nat.Partrec.Code.id) := by
+  simp
+
+example :
+    runs autoencoderInterpreter
+      (packedInput (ofNatExact 5)
+        (autoencoderPayload
+          (codeToProgram (Nat.Partrec.Code.const 5))
+          (codeToProgram Nat.Partrec.Code.id)))
+      (autoencoderOutput
+        (ofNatExact 5)
+        (ofNatExact 5)
+        (codeToProgram Nat.Partrec.Code.id)) := by
+  apply (runs_autoencoderInterpreter_iff
+    (x := ofNatExact 5)
+    (g := codeToProgram (Nat.Partrec.Code.const 5))
+    (f := codeToProgram Nat.Partrec.Code.id)
+    (y := ofNatExact 5)
+    (r := ofNatExact 5)).2
+  constructor
+  · exact (runs_const_iff 5 (ofNatExact 5) (ofNatExact 5)).2 rfl
+  · exact (runs_id_iff (ofNatExact 5) (ofNatExact 5)).2 rfl
+
+example :
+    ofNatExact 5 ∈ phasePrograms 4 := by
+  rw [mem_phasePrograms_iff]
+  have hlen : blen (ofNatExact 5) ≤ 3 := by
+    calc
+      blen (ofNatExact 5) ≤ blen (ofNat 5) := blen_ofNatExact_le_ofNat 5
+      _ = Nat.size 5 := blen_ofNat_eq_size 5
+      _ = 3 := by decide
+  omega
 
 end Sanity
 
