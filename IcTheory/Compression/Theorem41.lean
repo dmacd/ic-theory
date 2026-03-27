@@ -458,6 +458,64 @@ def uniformBranchSearchTimeBound (payloadBound : Nat) : List Nat → Nat
   | t :: ts =>
       2 ^ (payloadBound + 1) * (t + uniformBranchSearchTimeBound payloadBound ts + 1)
 
+private theorem sum_map_mul_left (a : Nat) (l : List Nat) :
+    (l.map (fun n => a * n)).sum = a * l.sum := by
+  induction l with
+  | nil =>
+      simp
+  | cons x xs ih =>
+      simp [Nat.left_distrib, ih, Nat.add_assoc, Nat.add_left_comm, Nat.add_comm]
+
+/-- Explicit weighted terms whose sum equals the nested branch recurrence. -/
+def branchSearchTimeTerms : List Program → List Program → List Nat → List Nat
+  | [], [], [] => []
+  | f :: fs, g :: gs, t :: ts =>
+      let a := 2 ^ (BitString.blen (autoencoderPayload g f) + 1)
+      let tail := branchSearchTimeTerms fs gs ts
+      a * (t + 1) :: tail.map (fun n => a * n)
+  | _, _, _ => []
+
+/-- Uniform weighted terms for the constant-payload-length recurrence. -/
+def uniformBranchSearchTimeTerms (payloadBound : Nat) : List Nat → List Nat
+  | [] => []
+  | t :: ts =>
+      let a := 2 ^ (payloadBound + 1)
+      let tail := uniformBranchSearchTimeTerms payloadBound ts
+      a * (t + 1) :: tail.map (fun n => a * n)
+
+theorem branchSearchTimeBound_eq_sum_terms
+    (fs gs : List Program) (localWork : List Nat) :
+    branchSearchTimeBound fs gs localWork = (branchSearchTimeTerms fs gs localWork).sum := by
+  induction fs generalizing gs localWork with
+  | nil =>
+      cases gs <;> cases localWork <;> simp [branchSearchTimeBound, branchSearchTimeTerms]
+  | cons f fs ih =>
+      cases gs with
+      | nil =>
+          cases localWork <;> simp [branchSearchTimeBound, branchSearchTimeTerms]
+      | cons g gs =>
+          cases localWork with
+          | nil =>
+              simp [branchSearchTimeBound, branchSearchTimeTerms]
+          | cons t ts =>
+              simp [branchSearchTimeBound, branchSearchTimeTerms]
+              rw [sum_map_mul_left, ih]
+              rw [Nat.mul_add, Nat.mul_add, Nat.mul_one, Nat.mul_add, Nat.mul_one]
+              ac_rfl
+
+theorem uniformBranchSearchTimeBound_eq_sum_terms
+    (payloadBound : Nat) (localWork : List Nat) :
+    uniformBranchSearchTimeBound payloadBound localWork =
+      (uniformBranchSearchTimeTerms payloadBound localWork).sum := by
+  induction localWork with
+  | nil =>
+      simp [uniformBranchSearchTimeBound, uniformBranchSearchTimeTerms]
+  | cons t ts ih =>
+      simp [uniformBranchSearchTimeBound, uniformBranchSearchTimeTerms]
+      rw [sum_map_mul_left, ih]
+      rw [Nat.mul_add, Nat.mul_add, Nat.mul_one, Nat.mul_add, Nat.mul_one]
+      ac_rfl
+
 theorem branchSearchTimeBound_le_uniform
     {payloadBound : Nat} {fs gs : List Program} {localWork : List Nat}
     (hpayload :
@@ -523,6 +581,24 @@ theorem theorem41_runtimeReduction
   exact branchSearchTimeBound_le_uniform
     (autoencoderPayloads_bounded_of_incrementalBCompressionScheme hb hchain)
     hlen
+
+/-- Weighted-sum version of the current Theorem 4.1 runtime reduction. The nested branch
+recurrence is rewritten as an explicit sum of weighted local step costs, and then compared against
+the corresponding uniform weighted sum at payload bound `autoencoderPayloadBound b`. -/
+theorem theorem41_runtimeReduction_weighted
+    {b : Nat} {x rs : Program} {fs gs : List Program} {localWork : List Nat}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs)
+    (hlen : fs.length = localWork.length) :
+    ∃ node, IsAliceBranch x node ∧ node.description = schemeDescription rs fs ∧
+      runs schemeDescriptionInterpreter node.description x ∧
+      (branchSearchTimeTerms fs gs localWork).sum ≤
+        (uniformBranchSearchTimeTerms (autoencoderPayloadBound b) localWork).sum := by
+  obtain ⟨node, hnode, hdesc, hruns, hbound⟩ :=
+    theorem41_runtimeReduction hb hchain hlen
+  refine ⟨node, hnode, hdesc, hruns, ?_⟩
+  rw [← branchSearchTimeBound_eq_sum_terms, ← uniformBranchSearchTimeBound_eq_sum_terms]
+  exact hbound
 
 /-- Closed-form arithmetic upper bound for the uniform branch recurrence. This is a coarser but
 fully explicit replacement for the nested search-time definition. -/
