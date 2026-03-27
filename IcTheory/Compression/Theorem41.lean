@@ -524,6 +524,87 @@ theorem theorem41_runtimeReduction
     (autoencoderPayloads_bounded_of_incrementalBCompressionScheme hb hchain)
     hlen
 
+/-- Closed-form arithmetic upper bound for the uniform branch recurrence. This is a coarser but
+fully explicit replacement for the nested search-time definition. -/
+theorem uniformBranchSearchTimeBound_le_closed
+    (payloadBound : Nat) (localWork : List Nat) :
+    uniformBranchSearchTimeBound payloadBound localWork ≤
+      (localWork.sum + localWork.length) *
+        2 ^ ((payloadBound + 1) * localWork.length) := by
+  induction localWork with
+  | nil =>
+      simp [uniformBranchSearchTimeBound]
+  | cons t ts ih =>
+      let a := 2 ^ (payloadBound + 1)
+      let big := 2 ^ ((payloadBound + 1) * (ts.length + 1))
+      have htail :
+          a * uniformBranchSearchTimeBound payloadBound ts ≤
+            (ts.sum + ts.length) * big := by
+        calc
+          a * uniformBranchSearchTimeBound payloadBound ts ≤
+              a * ((ts.sum + ts.length) * 2 ^ ((payloadBound + 1) * ts.length)) := by
+            exact Nat.mul_le_mul_left _ ih
+          _ = (ts.sum + ts.length) * big := by
+            dsimp [a, big]
+            calc
+              2 ^ (payloadBound + 1) * ((ts.sum + ts.length) * 2 ^ ((payloadBound + 1) * ts.length)) =
+                  (ts.sum + ts.length) *
+                    (2 ^ (payloadBound + 1) * 2 ^ ((payloadBound + 1) * ts.length)) := by
+                ac_rfl
+              _ = (ts.sum + ts.length) *
+                  2 ^ ((payloadBound + 1) + (payloadBound + 1) * ts.length) := by
+                rw [← Nat.pow_add]
+            have hexp :
+                (payloadBound + 1) + (payloadBound + 1) * ts.length =
+                  (payloadBound + 1) * (ts.length + 1) := by
+              rw [Nat.mul_add, Nat.mul_one]
+              ac_rfl
+            rw [hexp]
+      have hpow :
+          a ≤ big := by
+        dsimp [a, big]
+        refine Nat.pow_le_pow_right (by decide) ?_
+        calc
+          payloadBound + 1 = (payloadBound + 1) * 1 := by simp
+          _ ≤ (payloadBound + 1) * (ts.length + 1) := by
+            exact Nat.mul_le_mul_left _ (by simp)
+      have hhead :
+          a * (t + 1) ≤ (t + 1) * big := by
+        calc
+          a * (t + 1) = (t + 1) * a := by ac_rfl
+          _ ≤ (t + 1) * big := by
+            exact Nat.mul_le_mul_left _ hpow
+      calc
+        uniformBranchSearchTimeBound payloadBound (t :: ts) =
+            a * uniformBranchSearchTimeBound payloadBound ts + a * (t + 1) := by
+          dsimp [uniformBranchSearchTimeBound, a]
+          rw [Nat.mul_add, Nat.mul_add, Nat.mul_one, Nat.mul_add, Nat.mul_one]
+          ac_rfl
+        _ ≤ (ts.sum + ts.length) * big + (t + 1) * big := by
+          exact Nat.add_le_add htail hhead
+        _ = ((t :: ts).sum + (t :: ts).length) * big := by
+          simp [List.sum_cons, big, Nat.right_distrib, Nat.add_assoc, Nat.add_left_comm,
+            Nat.add_comm]
+
+/-- Explicit current-form runtime bound for Theorem 4.1. It combines the semantic branch
+extraction with the uniform payload bound and collapses the nested search-time recurrence into a
+single arithmetic expression. -/
+theorem theorem41_runtimeReduction_closed
+    {b : Nat} {x rs : Program} {fs gs : List Program} {localWork : List Nat}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs)
+    (hlen : fs.length = localWork.length) :
+    ∃ node, IsAliceBranch x node ∧ node.description = schemeDescription rs fs ∧
+      runs schemeDescriptionInterpreter node.description x ∧
+      branchSearchTimeBound fs gs localWork ≤
+        (localWork.sum + localWork.length) *
+          2 ^ ((autoencoderPayloadBound b + 1) * localWork.length) := by
+  obtain ⟨node, hnode, hdesc, hruns, hbound⟩ :=
+    theorem41_runtimeReduction hb hchain hlen
+  refine ⟨node, hnode, hdesc, hruns, ?_⟩
+  exact le_trans hbound
+    (uniformBranchSearchTimeBound_le_closed (autoencoderPayloadBound b) localWork)
+
 end
 
 end Compression
