@@ -163,6 +163,35 @@ theorem schemeDescription_length_le_of_mem_bound
   simp at hpayload
   omega
 
+/-- Formalization-level version of equation (51): once all stored features are bounded by a
+uniform constant `n`, the concrete description object `D_s` differs from the terminal residual
+length by only logarithmic headers and a linear-in-steps constant term. -/
+theorem schemeDescription_logLe_terminalResidual_of_mem_bound
+    {rs : Program} {fs : List Program} {n : Nat}
+    (hfs : ∀ f ∈ fs, BitString.blen f ≤ n) :
+    LogLe (BitString.blen (schemeDescription rs fs))
+      (BitString.blen rs + fs.length * schemeDescriptionFeatureCost n)
+      (max (BitString.blen rs) fs.length) := by
+  have hlen := schemeDescription_length_le_of_mem_bound (rs := rs) (fs := fs) (n := n) hfs
+  have hrsLog :
+      BitString.blen (BitString.ofNat (BitString.blen rs)) ≤
+        logPenalty (max (BitString.blen rs) fs.length) + 1 := by
+    have hmono :
+        logPenalty (BitString.blen rs) ≤ logPenalty (max (BitString.blen rs) fs.length) :=
+      logPenalty_mono (Nat.le_max_left _ _)
+    have hsize := blen_ofNat_le_logPenalty_succ (BitString.blen rs)
+    omega
+  have hstepsLog :
+      BitString.blen (BitString.ofNat fs.length) ≤
+        logPenalty (max (BitString.blen rs) fs.length) + 1 := by
+    have hmono :
+        logPenalty fs.length ≤ logPenalty (max (BitString.blen rs) fs.length) :=
+      logPenalty_mono (Nat.le_max_right _ _)
+    have hsize := blen_ofNat_le_logPenalty_succ fs.length
+    omega
+  refine ⟨5, 7, ?_⟩
+  omega
+
 /-- Current formalization-level cutoff for terminating the `b`-compressible compression scheme.
 It is the natural constant obtained by combining the `b`-feature bound from Theorem 3.7 with the
 `|r| ≤ |x| / b` shrinkage built into `b`-descriptive maps. -/
@@ -836,17 +865,88 @@ theorem prefixComplexity_le_schemeDescriptionBound_of_incrementalBCompressionSch
       schemeDescriptionPrefixOverhead
   exact le_trans hprefix hbound
 
-/-- Current-form Theorem 3.9: along the `b`-compressible compression scheme, all selected
-features and descriptive maps are uniformly bounded by constants depending only on `b`, the step
-count is logarithmic in `|x|`, and the terminal residual is either small or no longer
-`b`-compressible. The concrete description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩` is now encoded
-as `schemeDescription rs fs`, with its length bounded explicitly in the companion theorem
-`schemeDescription_length_le_of_incrementalBCompressionScheme`. -/
+/-- Current prefix-form replacement for the lower side of equation (48): the concrete description
+object `D_s` gives a prefix description of `x` up to the expected self-delimiting overhead. -/
+theorem theorem39_eq48_lower_current
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    LogLe (PrefixComplexity x)
+      (BitString.blen (schemeDescription rs fs))
+      (BitString.blen (schemeDescription rs fs)) := by
+  have hprefix := prefixComplexity_le_schemeDescription_of_incrementalBCompressionScheme hchain
+  have hlog :
+      BitString.blen (BitString.ofNat (BitString.blen (schemeDescription rs fs))) ≤
+        logPenalty (BitString.blen (schemeDescription rs fs)) + 1 := by
+    simpa using
+      blen_ofNat_le_logPenalty_succ (BitString.blen (schemeDescription rs fs))
+  refine ⟨2, schemeDescriptionPrefixOverhead + 2, ?_⟩
+  omega
+
+/-- Explicit upper bound on the concrete description object `D_s` at the scheme scale. This is
+the current formalization-level upper side of equation (48). -/
+theorem theorem39_eq48_upper_current
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    BitString.blen (schemeDescription rs fs) ≤
+      BitString.blen rs +
+        (Nat.log b (BitString.blen x) + 1) *
+          schemeDescriptionFeatureCost (bCompressibleFeatureBound b) +
+        (2 * BitString.blen (BitString.ofNat (BitString.blen rs)) + 1) +
+        (3 * BitString.blen (BitString.ofNat (Nat.log b (BitString.blen x) + 1)) + 1) := by
+  exact schemeDescription_length_le_of_incrementalBCompressionScheme hb hchain
+
+/-- Equation (49): every selected feature in the Section 3.5 scheme has uniformly bounded length,
+with a constant depending only on `b`. -/
+theorem theorem39_eq49
+    {b : Nat} {x rs : Program} {fs gs : List Program} {f : Program}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs)
+    (hf : f ∈ fs) :
+    BitString.blen f ≤ bCompressibleFeatureBound b := by
+  exact (List.forall_iff_forall_mem.mp
+    (incrementalBCompressionScheme_features_bounded hb hchain)) f hf
+
+/-- Equation (50): the number of steps in the Section 3.5 scheme is logarithmic in `|x|`. -/
+theorem theorem39_eq50
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    fs.length ≤ Nat.log b (BitString.blen x) + 1 := by
+  exact incrementalBCompressionScheme_length_le_log hb hchain
+
+/-- Formalization-level version of equation (51) specialized to the Section 3.5 scheme. -/
+theorem theorem39_eq51
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    LogLe (BitString.blen (schemeDescription rs fs))
+      (BitString.blen rs +
+        fs.length * schemeDescriptionFeatureCost (bCompressibleFeatureBound b))
+      (max (BitString.blen rs) fs.length) := by
+  have hfs :
+      ∀ f ∈ fs, BitString.blen f ≤ bCompressibleFeatureBound b := by
+    intro f hf
+    exact theorem39_eq49 hb hchain hf
+  exact schemeDescription_logLe_terminalResidual_of_mem_bound hfs
+
+/-- Current-form Theorem 3.9: the concrete description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`
+now has explicit lower and upper prefix-complexity bounds, its raw length satisfies the
+formalization-level version of equation (51), all selected features and descriptive maps are
+uniformly bounded by constants depending only on `b`, the step count is logarithmic in `|x|`,
+and the terminal residual is either small or no longer `b`-compressible. -/
 theorem theorem39
     {b : Nat} {x rs : Program} {fs gs : List Program}
     (hb : 1 < b)
     (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
-    List.Forall (fun f => BitString.blen f ≤ bCompressibleFeatureBound b) fs ∧
+    LogLe (PrefixComplexity x)
+      (BitString.blen (schemeDescription rs fs))
+      (BitString.blen (schemeDescription rs fs)) ∧
+      LogLe (BitString.blen (schemeDescription rs fs))
+        (BitString.blen rs +
+          fs.length * schemeDescriptionFeatureCost (bCompressibleFeatureBound b))
+        (max (BitString.blen rs) fs.length) ∧
+      List.Forall (fun f => BitString.blen f ≤ bCompressibleFeatureBound b) fs ∧
       List.Forall
         (fun g => BitString.blen g ≤
           shortFeatureResidualMapBound (bCompressibleFeatureBound b))
@@ -854,10 +954,12 @@ theorem theorem39
       fs.length = gs.length ∧
       fs.length ≤ Nat.log b (BitString.blen x) + 1 ∧
       (BitString.blen rs ≤ bCompressionCutoff b ∨ ¬ BCompressible b rs) := by
-  refine ⟨incrementalBCompressionScheme_features_bounded hb hchain,
+  refine ⟨theorem39_eq48_lower_current hchain,
+    theorem39_eq51 hb hchain,
+    incrementalBCompressionScheme_features_bounded hb hchain,
     incrementalBCompressionScheme_maps_bounded hb hchain,
     incrementalBCompressionScheme_lengths_eq hchain,
-    incrementalBCompressionScheme_length_le_log hb hchain,
+    theorem39_eq50 hb hchain,
     incrementalBCompressionScheme_terminal hchain⟩
 
 end
