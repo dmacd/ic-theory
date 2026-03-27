@@ -2,6 +2,7 @@ import IcTheory.Computability
 import IcTheory.Compression.Section32
 import IcTheory.Compression.Theorem39
 import IcTheory.Compression.Section4
+import IcTheory.Compression.Theorem41
 
 namespace IcTheory
 
@@ -200,6 +201,12 @@ example :
       _ = Nat.size 5 := blen_ofNat_eq_size 5
       _ = 3 := by decide
   omega
+
+example : phaseTotalBudget 3 = 24 := by
+  simpa using phaseTotalBudget_eq 3
+
+example : nodeBudgetUntil ([] : Program) 3 = 14 := by
+  simpa using nodeBudgetUntil_eq_of_lt (a := ([] : Program)) (i := 3) (by simp)
 
 end Sanity
 
