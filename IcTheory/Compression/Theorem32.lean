@@ -8,6 +8,99 @@ open UniversalMachine
 
 noncomputable section
 
+/-- High-information features are incompressible in the paper's sense:
+the feature length is bounded below by its prefix complexity up to logarithmic slack. -/
+private theorem featureLength_logLe_prefixComplexity_of_highInformation {f x : Program}
+    (hfeature : IsFeature runs f x)
+    (hinfo : HighInformationIn f x) :
+    LogLe (BitString.blen f) (PrefixComplexity f) (BitString.blen x) := by
+  have hproj :
+      LogLe (PrefixComplexity x) (JointComplexity f x) (BitString.blen x) := by
+    exact logLe_of_scale_logLe
+      (jointRightProjectionLogLe f x)
+      (jointComplexity_featureObject_logLe_of_highInformation hfeature hinfo)
+  have hupper :
+      LogLe (JointComplexity f x)
+        (PrefixComplexity f + PrefixConditionalComplexity x f)
+        (BitString.blen x) :=
+    jointUpperAtFeatureScale_of_highInformation hfeature hinfo
+  have hkx :
+      LogLe (PrefixComplexity x)
+        (PrefixComplexity f + PrefixConditionalComplexity x f)
+        (BitString.blen x) := by
+    exact logLe_trans hproj hupper
+  rcases hinfo with ⟨c₁, d₁, h₁⟩
+  rcases hkx with ⟨c₂, d₂, h₂⟩
+  refine ⟨c₁ + c₂, d₁ + d₂, ?_⟩
+  have hsum :
+      BitString.blen f + PrefixConditionalComplexity x f ≤
+        PrefixComplexity f + PrefixConditionalComplexity x f +
+          (c₁ + c₂) * logPenalty (BitString.blen x) + (d₁ + d₂) := by
+    calc
+      BitString.blen f + PrefixConditionalComplexity x f ≤
+          PrefixComplexity x + c₁ * logPenalty (BitString.blen x) + d₁ := h₁
+      _ ≤
+          PrefixComplexity f + PrefixConditionalComplexity x f +
+            (c₂ * logPenalty (BitString.blen x) + d₂) +
+            (c₁ * logPenalty (BitString.blen x) + d₁) := by
+        omega
+      _ =
+          PrefixComplexity f + PrefixConditionalComplexity x f +
+            (c₁ + c₂) * logPenalty (BitString.blen x) + (d₁ + d₂) := by
+        rw [Nat.add_mul]
+        omega
+  omega
+
+/-- Theorem 3.1 in the prefix-incompressible branch:
+high information forces a shortest feature to be prefix-incompressible up to logarithmic slack. -/
+theorem theorem31_of_prefixGap {f x : Program}
+    (hshort : IsShortestFeature runs f x)
+    (hgap : LogLe (BitString.blen x) (PrefixComplexity x) (BitString.blen x)) :
+    LogEq (PrefixComplexity f) (BitString.blen f) (BitString.blen x) := by
+  let hfeature : IsFeature runs f x := shortestFeature_isFeature hshort
+  have hlen : BitString.blen f ≤ BitString.blen x := (feature_length_lt hfeature).le
+  have hinfo : HighInformationIn f x := by
+    rcases hfeature with ⟨g, r, hg, hf, hcomp⟩
+    rcases lemma32_log hf hcomp with ⟨c₁, d₁, h₁⟩
+    rcases hgap with ⟨c₂, d₂, h₂⟩
+    refine ⟨c₁ + c₂, d₁ + d₂, ?_⟩
+    have hsum :
+        BitString.blen f + PrefixConditionalComplexity x f ≤
+          BitString.blen x + (c₁ * logPenalty (BitString.blen x) + d₁) := by
+      omega
+    have hsum' :
+        BitString.blen f + PrefixConditionalComplexity x f ≤
+          PrefixComplexity x + (c₂ * logPenalty (BitString.blen x) + d₂) +
+            (c₁ * logPenalty (BitString.blen x) + d₁) := by
+      omega
+    simpa [Nat.add_mul, Nat.add_assoc, Nat.add_left_comm, Nat.add_comm] using hsum'
+  refine ⟨prefixComplexity_log_upper_of_le hlen, ?_⟩
+  exact featureLength_logLe_prefixComplexity_of_highInformation hfeature hinfo
+
+/-- Theorem 3.1 in the highly-compressible branch:
+all shortest features already live in a constant-size family, so incompressibility is automatic. -/
+theorem theorem31_of_compressibleByMoreThan {f x : Program}
+    (hshort : IsShortestFeature runs f x)
+    (hcompress : CompressibleByMoreThan universalFeatureConstant x) :
+    LogEq (PrefixComplexity f) (BitString.blen f) (BitString.blen x) := by
+  let hfeature : IsFeature runs f x := shortestFeature_isFeature hshort
+  have hlenx : BitString.blen f ≤ BitString.blen x := (feature_length_lt hfeature).le
+  have hconst : BitString.blen f ≤ universalFeatureConstant :=
+    shortestFeature_le_universalFeatureConstant hshort hcompress
+  refine ⟨prefixComplexity_log_upper_of_le hlenx, ?_⟩
+  refine ⟨0, universalFeatureConstant, ?_⟩
+  omega
+
+/-- Theorem 3.1 packaged by the two Section 3.1 branches currently formalized in the repo. -/
+theorem theorem31_of_cases {f x : Program}
+    (hshort : IsShortestFeature runs f x)
+    (hcases : CompressibleByMoreThan universalFeatureConstant x ∨
+      LogLe (BitString.blen x) (PrefixComplexity x) (BitString.blen x)) :
+    LogEq (PrefixComplexity f) (BitString.blen f) (BitString.blen x) := by
+  rcases hcases with hcompress | hgap
+  · exact theorem31_of_compressibleByMoreThan hshort hcompress
+  · exact theorem31_of_prefixGap hshort hgap
+
 /-- If `x` is prefix-incompressible up to logarithmic slack, then every feature of `x` carries
 high information in the sense needed for Lemma 3.3. -/
 theorem highInformationIn_of_feature_of_prefixGap {f x : Program}

@@ -553,6 +553,63 @@ theorem theorem35
       exact ⟨hlt.2, hlt.1⟩
     simpa [hdist] using hswap
 
+/-- Paper-form Theorem 3.5:
+two distinct features in an incremental compression chain have mutual information
+`O(|i - j| log l(x))` in both directions. -/
+theorem theorem35_paper
+    {x rs : Program} {fs : List Program} {i j : Nat}
+    (hchain : IsIncrementalPrefixCompression x fs rs)
+    (hi : i < fs.length)
+    (hj : j < fs.length)
+    (hij : i ≠ j) :
+    ∃ c d : Nat,
+      PrefixInformation fs[i] fs[j] ≤
+        Nat.dist i j * (c * logPenalty (BitString.blen x) + d) ∧
+      PrefixInformation fs[j] fs[i] ≤
+        Nat.dist i j * (c * logPenalty (BitString.blen x) + d) := by
+  rcases theorem35 hchain hi hj hij with ⟨hij', hji'⟩
+  rcases hij' with ⟨c₁, d₁, h₁⟩
+  rcases hji' with ⟨c₂, d₂, h₂⟩
+  let m := Nat.dist i j
+  have hm : 1 ≤ m := Nat.succ_le_of_lt (Nat.dist_pos_of_ne hij)
+  have hstep : 2 * (m - 1) + 4 ≤ 4 * m := by
+    omega
+  have h₁' :
+      PrefixInformation fs[i] fs[j] ≤
+        (2 * (m - 1) + 4) * (c₁ * logPenalty (BitString.blen x) + d₁) := by
+    simpa [m] using h₁
+  have h₂' :
+      PrefixInformation fs[j] fs[i] ≤
+        (2 * (m - 1) + 4) * (c₂ * logPenalty (BitString.blen x) + d₂) := by
+    simpa [m] using h₂
+  refine ⟨4 * (c₁ + c₂), 4 * (d₁ + d₂), ?_, ?_⟩
+  · calc
+      PrefixInformation fs[i] fs[j] ≤
+          (2 * (m - 1) + 4) * (c₁ * logPenalty (BitString.blen x) + d₁) := h₁'
+      _ ≤ 4 * m * (c₁ * logPenalty (BitString.blen x) + d₁) := by
+        exact Nat.mul_le_mul_right _ hstep
+      _ ≤ 4 * m * ((c₁ + c₂) * logPenalty (BitString.blen x) + (d₁ + d₂)) := by
+        refine Nat.mul_le_mul_left (4 * m) ?_
+        rw [Nat.add_mul]
+        omega
+      _ = m * (4 * (c₁ + c₂) * logPenalty (BitString.blen x) + 4 * (d₁ + d₂)) := by
+        ring_nf
+      _ = Nat.dist i j * (4 * (c₁ + c₂) * logPenalty (BitString.blen x) + 4 * (d₁ + d₂)) := by
+        rfl
+  · calc
+      PrefixInformation fs[j] fs[i] ≤
+          (2 * (m - 1) + 4) * (c₂ * logPenalty (BitString.blen x) + d₂) := h₂'
+      _ ≤ 4 * m * (c₂ * logPenalty (BitString.blen x) + d₂) := by
+        exact Nat.mul_le_mul_right _ hstep
+      _ ≤ 4 * m * ((c₁ + c₂) * logPenalty (BitString.blen x) + (d₁ + d₂)) := by
+        refine Nat.mul_le_mul_left (4 * m) ?_
+        rw [Nat.add_mul]
+        omega
+      _ = m * (4 * (c₁ + c₂) * logPenalty (BitString.blen x) + 4 * (d₁ + d₂)) := by
+        ring_nf
+      _ = Nat.dist i j * (4 * (c₁ + c₂) * logPenalty (BitString.blen x) + 4 * (d₁ + d₂)) := by
+        rfl
+
 end
 
 end Compression

@@ -210,6 +210,60 @@ theorem theorem38_of_shortestBFeature
     (hf := theorem37_shortestBFeature hb hbc hshortF)
     (hshort := hshortG)
 
+/-- Paper-form Theorem 3.8:
+if a feature has a uniform length bound `n`, then both the canonical residual and the residual of
+any shortest descriptive map have conditional prefix complexity `O(1)` given `x`, and the
+shortest descriptive map itself has constant length. -/
+theorem theorem38
+    {f g x : Program} {n : Nat}
+    (hfeature : IsFeature runs f x)
+    (hf : BitString.blen f ≤ n)
+    (hshort : IsShortestDescriptiveMap runs f g x) :
+    (∃ q : Program,
+      runs f q x ∧
+      CompressionCondition f q x ∧
+      LogLe (PrefixConditionalComplexity q x) 0 (BitString.blen x)) ∧
+    ∃ r : Program,
+      runs g x r ∧
+      runs f r x ∧
+      CompressionCondition f r x ∧
+      BitString.blen g = ConditionalComplexity r x ∧
+      LogLe (PrefixConditionalComplexity r x) 0 (BitString.blen x) ∧
+      LogLe (BitString.blen g) 0 (BitString.blen x) := by
+  rcases theorem38_of_feature_length_le hfeature hf hshort with ⟨hq, hr⟩
+  refine ⟨?_, ?_⟩
+  · rcases hq with ⟨q, hqx, hcomp, hKq⟩
+    refine ⟨q, hqx, hcomp, ?_⟩
+    exact ⟨0, shortFeatureResidualPrefixBound n, by simpa using hKq⟩
+  · rcases hr with ⟨r, hg, hfr, hcomp, hgEq, hKr, hgLen⟩
+    refine ⟨r, hg, hfr, hcomp, hgEq, ?_, ?_⟩
+    · exact ⟨0, shortFeatureResidualPrefixBound n, by simpa using hKr⟩
+    · exact ⟨0, shortFeatureResidualMapBound n, by simpa using hgLen⟩
+
+/-- Section 3.4 specialization of the paper-form Theorem 3.8:
+for a shortest `b`-feature of a `b`-compressible string, all constants depend only on `b`. -/
+theorem theorem38_paper_of_shortestBFeature
+    {b : Nat} {f g x : Program}
+    (hb : 1 < b)
+    (hbc : BCompressible b x)
+    (hshortF : IsShortestBFeature runs b f x)
+    (hshortG : IsShortestDescriptiveMap runs f g x) :
+    (∃ q : Program,
+      runs f q x ∧
+      CompressionCondition f q x ∧
+      LogLe (PrefixConditionalComplexity q x) 0 (BitString.blen x)) ∧
+    ∃ r : Program,
+      runs g x r ∧
+      runs f r x ∧
+      CompressionCondition f r x ∧
+      BitString.blen g = ConditionalComplexity r x ∧
+      LogLe (PrefixConditionalComplexity r x) 0 (BitString.blen x) ∧
+      LogLe (BitString.blen g) 0 (BitString.blen x) := by
+  exact theorem38
+    (hfeature := bFeature_forgets hshortF.1)
+    (hf := theorem37_shortestBFeature hb hbc hshortF)
+    (hshort := hshortG)
+
 end
 
 end Compression
