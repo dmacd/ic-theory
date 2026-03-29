@@ -16,8 +16,8 @@ Current compiled coverage includes:
   symmetry-of-information tooling
 - compression definitions and Section 2 results for features, descriptive maps, singleton
   features, and the universal-feature branch
-- Sections 3.1 to 3.5, including packaged Theorems 3.2 to 3.4, the `b`-feature transfer layer,
-  and current-form Theorems 3.7 to 3.9
+- Sections 3.1 to 3.5, including packaged paper-form Theorems 3.1 to 3.9 and the
+  `b`-feature transfer layer
 - the concrete Section 3.5 description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`, together with
   decoding, interpreters, and explicit length/prefix-complexity bounds
 - Section 4 autoencoder/search semantics: encoded autoencoder payloads and outputs, the fixed
@@ -35,8 +35,8 @@ The default library target builds with `lake build`.
   and logarithmic bound infrastructure
 - `IcTheory.Computability`: the universal machine wrapper and the complexity/information layer
 - `IcTheory.Compression`: feature theory, Sections 2 to 4, the `b`-compressible scheme
-  machinery, the concrete `D_s` encoding/interpreter, and the current Theorem 3.9 / Theorem 4.1
-  semantic/runtime packaging
+  machinery, the concrete `D_s` encoding/interpreter, the paper-form Theorem 3.9 packaging, and
+  the current Theorem 4.1 semantic/runtime packaging
 - `IcTheory.Sanity`: consistency checks and small integration lemmas
 
 ## Build

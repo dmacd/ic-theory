@@ -1158,10 +1158,11 @@ theorem theorem39_eq48_upper
         (shortFeatureResidualMapBound (bCompressibleFeatureBound b)))
       (hchain := hchain))
 
-/-- Current-form Theorem 3.9: the concrete description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`
-now has exact hypothesis-free lower and upper sides for equation (48), the formalization-level
-version of equation (51), uniformly bounded selected features and descriptive maps, a logarithmic
-step count, and a terminal residual that is either small or no longer `b`-compressible. -/
+/-- Packaged Theorem 3.9:
+the concrete description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩` has exact lower and upper sides
+for equation (48), the formalization-level version of equation (51), uniformly bounded selected
+features and descriptive maps, a logarithmic step count, and a terminal residual that is either
+small or no longer `b`-compressible. -/
 theorem theorem39
     {b : Nat} {x rs : Program} {fs gs : List Program}
     (hb : 1 < b)
