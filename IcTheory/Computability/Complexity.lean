@@ -52,6 +52,28 @@ theorem complexity_le_length {x f : BitString} (hf : runs f [] x) :
     Complexity x ≤ BitString.blen f := by
   simpa [Complexity] using conditionalComplexity_le_length hf
 
+theorem complexity_le_of_runs_of_blen_le
+    {x r g : Program} {k : Nat}
+    (hrun : runs g x r)
+    (hg : BitString.blen g ≤ k) :
+    Complexity r ≤ Complexity x + (k + (2 * BitString.blen (BitString.ofNat k) + 5)) := by
+  obtain ⟨p, hpLen, hpRuns⟩ := exists_program_forComplexity x
+  have hpost : runs (postcomposePackedProgram g p) [] r :=
+    runs_postcomposePackedProgram_of_runs hpRuns hrun
+  have hbound :
+      Complexity r ≤ BitString.blen (postcomposePackedProgram g p) :=
+    complexity_le_length hpost
+  have hlen :
+      BitString.blen (postcomposePackedProgram g p) ≤
+        Complexity x + (k + (2 * BitString.blen (BitString.ofNat k) + 5)) := by
+    calc
+      BitString.blen (postcomposePackedProgram g p) ≤
+          BitString.blen p + (k + (2 * BitString.blen (BitString.ofNat k) + 5)) := by
+        exact blen_postcomposePackedProgram_le_of_blen_le hg
+      _ = Complexity x + (k + (2 * BitString.blen (BitString.ofNat k) + 5)) := by
+        rw [hpLen]
+  exact le_trans hbound hlen
+
 end
 
 end UniversalMachine

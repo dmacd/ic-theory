@@ -180,6 +180,42 @@ theorem decodePrefixDescription_payload_blen_le (q : Program) :
   exact le_trans (decodeE2Payload_blen_le (decodePairPayload q).2)
     (decodePairPayload_snd_blen_le q)
 
+theorem decodeExactPairPayload_fst_blen_le (payload : Program) :
+    BitString.blen (BitString.decodeExactPairPayload payload).1 ≤ BitString.blen payload := by
+  unfold BitString.decodeExactPairPayload
+  set lenCodeBits := BitString.countLeadingTrue payload
+  set rest₁ := (BitString.splitAt (lenCodeBits + 1) payload).2
+  set lenCode := (BitString.splitAt lenCodeBits rest₁).1
+  set rest₂ := (BitString.splitAt lenCodeBits rest₁).2
+  exact le_trans
+    (splitAt_fst_blen_le (BitString.toNatExact lenCode) rest₂)
+    (le_trans
+      (splitAt_snd_blen_le lenCodeBits rest₁)
+      (splitAt_snd_blen_le (lenCodeBits + 1) payload))
+
+theorem decodeExactPairPayload_snd_blen_le (payload : Program) :
+    BitString.blen (BitString.decodeExactPairPayload payload).2 ≤ BitString.blen payload := by
+  unfold BitString.decodeExactPairPayload
+  set lenCodeBits := BitString.countLeadingTrue payload
+  set rest₁ := (BitString.splitAt (lenCodeBits + 1) payload).2
+  set lenCode := (BitString.splitAt lenCodeBits rest₁).1
+  set rest₂ := (BitString.splitAt lenCodeBits rest₁).2
+  exact le_trans
+    (splitAt_snd_blen_le (BitString.toNatExact lenCode) rest₂)
+    (le_trans
+      (splitAt_snd_blen_le lenCodeBits rest₁)
+      (splitAt_snd_blen_le (lenCodeBits + 1) payload))
+
+theorem left_blen_lt_postcomposeProgram (g p : Program) :
+    BitString.blen g < BitString.blen (postcomposeProgram g p) := by
+  rw [blen_postcomposeProgram, BitString.blen_exactPairPayload]
+  omega
+
+theorem right_blen_lt_postcomposeProgram (g p : Program) :
+    BitString.blen p < BitString.blen (postcomposeProgram g p) := by
+  rw [blen_postcomposeProgram, BitString.blen_exactPairPayload]
+  omega
+
 theorem decodePairPayload_computable : Computable decodePairPayload := by
   unfold decodePairPayload
   exact Computable.pair

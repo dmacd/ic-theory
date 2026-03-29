@@ -214,6 +214,17 @@ formalization. -/
 def ComplexityStepBound (k c : Nat) : Prop :=
   ∀ {x r g : Program}, runs g x r → BitString.blen g ≤ k → Complexity r ≤ Complexity x + c
 
+/-- Additive plain-complexity overhead obtained by hardwiring a plain program of length at most
+`k` into the active machine's postcompose branch. -/
+def postcomposeComplexityOverhead (k : Nat) : Nat :=
+  k + (2 * BitString.blen (BitString.ofNat k) + 5)
+
+theorem complexityStepBound_postcompose (k : Nat) :
+    ComplexityStepBound k (postcomposeComplexityOverhead k) := by
+  intro x r g hrun hg
+  simpa [postcomposeComplexityOverhead] using
+    (complexity_le_of_runs_of_blen_le (x := x) (r := r) (g := g) (k := k) hrun hg)
+
 /-- Inductive model of the Section 3.5 compression scheme. The lists are ordered as
 `f₁, ..., fₛ` and `g₁, ..., gₛ`. The scheme stops once the current residual is either small or no
 longer `b`-compressible. -/
@@ -1063,11 +1074,34 @@ theorem theorem39_eq48_upper_of_stepBound
           (3 * BitString.blen (BitString.ofNat steps) + 1) := by
       omega
 
+/-- Hypothesis-free exact upper side of equation (48), using the active machine's postcompose
+branch to discharge the one-step complexity transport. -/
+theorem theorem39_eq48_upper
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    let k := shortFeatureResidualMapBound (bCompressibleFeatureBound b)
+    let c := postcomposeComplexityOverhead k
+    let steps := Nat.log b (BitString.blen x) + 1
+    let n :=
+      b * (Complexity x + steps * c) + bCompressionCutoff b + (b - 1)
+    BitString.blen (schemeDescription rs fs) ≤
+      n +
+        steps * schemeDescriptionFeatureCost (bCompressibleFeatureBound b) +
+        (2 * BitString.blen (BitString.ofNat n) + 1) +
+        (3 * BitString.blen (BitString.ofNat steps) + 1) := by
+  simpa [postcomposeComplexityOverhead] using
+    (theorem39_eq48_upper_of_stepBound
+      (hb := hb)
+      (hstepC := complexityStepBound_postcompose
+        (shortFeatureResidualMapBound (bCompressibleFeatureBound b)))
+      (hchain := hchain))
+
 /-- Current-form Theorem 3.9: the concrete description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`
-now has explicit lower and upper prefix-complexity bounds, its raw length satisfies the
-formalization-level version of equation (51), all selected features and descriptive maps are
-uniformly bounded by constants depending only on `b`, the step count is logarithmic in `|x|`,
-and the terminal residual is either small or no longer `b`-compressible. -/
+now has an exact hypothesis-free upper side for equation (48), a current-form logarithmic lower
+side, the formalization-level version of equation (51), uniformly bounded selected features and
+descriptive maps, a logarithmic step count, and a terminal residual that is either small or no
+longer `b`-compressible. -/
 theorem theorem39
     {b : Nat} {x rs : Program} {fs gs : List Program}
     (hb : 1 < b)
@@ -1075,6 +1109,16 @@ theorem theorem39
     LogLe (PrefixComplexity x)
       (BitString.blen (schemeDescription rs fs))
       (BitString.blen (schemeDescription rs fs)) ∧
+      (let k := shortFeatureResidualMapBound (bCompressibleFeatureBound b)
+       let c := postcomposeComplexityOverhead k
+       let steps := Nat.log b (BitString.blen x) + 1
+       let n :=
+         b * (Complexity x + steps * c) + bCompressionCutoff b + (b - 1)
+       BitString.blen (schemeDescription rs fs) ≤
+         n +
+           steps * schemeDescriptionFeatureCost (bCompressibleFeatureBound b) +
+           (2 * BitString.blen (BitString.ofNat n) + 1) +
+           (3 * BitString.blen (BitString.ofNat steps) + 1)) ∧
       LogLe (BitString.blen (schemeDescription rs fs))
         (BitString.blen rs +
           fs.length * schemeDescriptionFeatureCost (bCompressibleFeatureBound b))
@@ -1088,6 +1132,7 @@ theorem theorem39
       fs.length ≤ Nat.log b (BitString.blen x) + 1 ∧
       (BitString.blen rs ≤ bCompressionCutoff b ∨ ¬ BCompressible b rs) := by
   refine ⟨theorem39_eq48_lower_current hchain,
+    theorem39_eq48_upper hb hchain,
     theorem39_eq51 hb hchain,
     incrementalBCompressionScheme_features_bounded hb hchain,
     incrementalBCompressionScheme_maps_bounded hb hchain,

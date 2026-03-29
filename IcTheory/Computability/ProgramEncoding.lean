@@ -526,6 +526,18 @@ private theorem parseTokensReverse_encodeTokensRev_aux (c : Code) (stk : List Co
   unfold additiveProgramToCode
   simpa using decodeAdditiveProgramNat_additiveCodeToProgram c
 
+theorem additiveCodeToProgram_ne_prefixReplaySentinel (c : Code) (q : Program) :
+    additiveCodeToProgram c ≠ true :: true :: true :: true :: q := by
+  cases c <;>
+    simp [additiveCodeToProgram, zeroBits, succBits, leftBits, rightBits,
+      pairBits, compBits, precBits, rfindBits]
+
+theorem additiveCodeToProgram_ne_postcomposeSentinel (c : Code) (q : Program) :
+    additiveCodeToProgram c ≠ false :: true :: true :: true :: q := by
+  cases c <;>
+    simp [additiveCodeToProgram, zeroBits, succBits, leftBits, rightBits,
+      pairBits, compBits, precBits, rfindBits]
+
 end UniversalMachine
 
 end IcTheory
