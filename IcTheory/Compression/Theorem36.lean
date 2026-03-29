@@ -208,6 +208,20 @@ def featurePrefixComplexitySum (fs : List Program) : Nat :=
       PrefixComplexity f + featurePrefixComplexitySum fs := by
   simp [featurePrefixComplexitySum]
 
+/-- Exact feature-length content of a feature list. This is the paper-facing quantity
+`∑ l(fᵢ*)` from Theorem 3.6. -/
+def featureLengthSum (fs : List Program) : Nat :=
+  (fs.map BitString.blen).sum
+
+@[simp] theorem featureLengthSum_nil :
+    featureLengthSum [] = 0 := by
+  rfl
+
+@[simp] theorem featureLengthSum_cons (f : Program) (fs : List Program) :
+    featureLengthSum (f :: fs) =
+      BitString.blen f + featureLengthSum fs := by
+  simp [featureLengthSum]
+
 /-- One compression step in the current prefix-facing theory: `f` is a shortest feature of `x`
 with residual `r`, and the two extra hypotheses are exactly the bridges already isolated in the
 Section 3 development. -/
@@ -217,6 +231,21 @@ def IsPrefixCompressionStep (x f r : Program) : Prop :=
     CompressionCondition f r x ∧
     BitString.blen f ≤ PrefixConditionalComplexity x r ∧
     NoSuperfluousPair r f x
+
+/-- One exact-length compression step in the paper-facing theory: `f` is a shortest feature of
+`x`, `r` is a residual with no superfluous overlap with `f`, and the compression condition holds. -/
+def IsCompressionStep (x f r : Program) : Prop :=
+  IsShortestFeature runs f x ∧
+    runs f r x ∧
+    CompressionCondition f r x ∧
+    NoSuperfluousPair r f x
+
+private theorem residual_length_lt_of_compressionStep {x f r : Program}
+    (hstep : IsCompressionStep x f r) :
+    BitString.blen r < BitString.blen x := by
+  rcases hstep with ⟨_, _, hcomp, _⟩
+  unfold CompressionCondition at hcomp
+  omega
 
 private theorem residual_length_lt_of_prefixCompressionStep {x f r : Program}
     (hstep : IsPrefixCompressionStep x f r) :
@@ -246,6 +275,33 @@ theorem stepLogEq_of_prefixCompressionStep {x f r : Program}
   rcases hstep with ⟨_hshort, hf, hcomp, hshortPrefix, hpair⟩
   exact stepLogEq_of_logEq <|
     theorem34_eq28_of_prefixShortestBridge_and_noSuperfluousPair hshortPrefix hf hcomp hpair
+
+private theorem logEq_add_left {a b k n : Nat}
+    (hab : LogEq a b n) :
+    LogEq (k + a) (k + b) n := by
+  exact ⟨logLe_add (logLe_refl k n) hab.1, logLe_add (logLe_refl k n) hab.2⟩
+
+/-- A single exact-length compression step already gives the one-step form of the paper's
+Theorem 3.6 decomposition. -/
+theorem stepLogEq_of_compressionStep {x f r : Program}
+    (hstep : IsCompressionStep x f r) :
+    StepLogEq (PrefixComplexity x)
+      (BitString.blen f + PrefixComplexity r)
+      1
+      (BitString.blen x) := by
+  rcases hstep with ⟨hshort, hf, hcomp, hpair⟩
+  have hstepEq :
+      LogEq (PrefixComplexity x)
+        (PrefixComplexity f + PrefixComplexity r)
+        (BitString.blen x) :=
+    theorem34_eq28_of_shortestFeature_and_noSuperfluousPair hshort hf hcomp hpair
+  have hfeatureEq :
+      LogEq (PrefixComplexity f + PrefixComplexity r)
+        (BitString.blen f + PrefixComplexity r)
+        (BitString.blen x) := by
+    simpa [Nat.add_comm, Nat.add_left_comm, Nat.add_assoc] using
+      (logEq_add_left (k := PrefixComplexity r) (theorem31 hshort))
+  exact stepLogEq_of_logEq (hstepEq.trans hfeatureEq)
 
 /-- Prefix-form Theorem 3.6: iterating the current single-step decomposition yields a total
 description length equal to the sum of feature prefix complexities plus the last residual
@@ -285,6 +341,57 @@ theorem theorem36_prefix {x rs : Program} {fs : List Program}
             (BitString.blen x) := by
         exact stepLogEq_trans hstepEq hrestAdd
       simpa [featurePrefixComplexitySum, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
+        htotal
+
+/-- Paper-facing inductive model of incremental compression. The feature list is ordered as
+`f₁, ..., fₛ`, and each residual witness is chosen so that the corresponding feature/residual pair
+already satisfies the no-superfluous-information conclusion from Theorem 3.4. -/
+inductive IsIncrementalCompression : Program → List Program → Program → Prop
+  | nil (x : Program) :
+      IsIncrementalCompression x [] x
+  | cons {x f r rs : Program} {fs : List Program}
+      (hstep : IsCompressionStep x f r)
+      (hrest : IsIncrementalCompression r fs rs) :
+      IsIncrementalCompression x (f :: fs) rs
+
+/-- Exact-length Theorem 3.6:
+iterating shortest-feature compression with no-superfluous residual witnesses yields a total
+description length equal to `∑ l(fᵢ*) + K(rₛ)` up to `s` logarithmic overhead terms. -/
+theorem theorem36 {x rs : Program} {fs : List Program}
+    (hchain : IsIncrementalCompression x fs rs) :
+    StepLogEq (PrefixComplexity x)
+      (featureLengthSum fs + PrefixComplexity rs)
+      fs.length
+      (BitString.blen x) := by
+  induction hchain with
+  | nil x =>
+      simpa using stepLogEq_refl (PrefixComplexity x) (BitString.blen x)
+  | @cons x f r rs fs hstep hrest ih =>
+      have hstepEq :
+          StepLogEq (PrefixComplexity x)
+            (BitString.blen f + PrefixComplexity r)
+            1
+            (BitString.blen x) :=
+        stepLogEq_of_compressionStep hstep
+      have hrestEq :
+          StepLogEq (PrefixComplexity r)
+            (featureLengthSum fs + PrefixComplexity rs)
+            fs.length
+            (BitString.blen x) := by
+        exact stepLogEq_of_scale_le ih (residual_length_lt_of_compressionStep hstep).le
+      have hrestAdd :
+          StepLogEq (BitString.blen f + PrefixComplexity r)
+            (BitString.blen f + (featureLengthSum fs + PrefixComplexity rs))
+            fs.length
+            (BitString.blen x) := by
+        exact stepLogEq_add_left hrestEq
+      have htotal :
+          StepLogEq (PrefixComplexity x)
+            (BitString.blen f + (featureLengthSum fs + PrefixComplexity rs))
+            (1 + fs.length)
+            (BitString.blen x) := by
+        exact stepLogEq_trans hstepEq hrestAdd
+      simpa [featureLengthSum, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
         htotal
 
 end

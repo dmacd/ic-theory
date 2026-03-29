@@ -74,27 +74,27 @@ private theorem autoencoderFeatureCodeNat_computable : Computable autoencoderFea
 
 private theorem evalAutoencoderInterpreter_partrec :
     Nat.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (autoencoderMapCodeNat n)) n.unpair.1 >>= fun rNat =>
-        Code.eval (Denumerable.ofNat Code (autoencoderFeatureCodeNat n)) rNat >>= fun yNat =>
+      Code.eval (storedProgramCode (autoencoderMapCodeNat n)) n.unpair.1 >>= fun rNat =>
+        Code.eval (storedProgramCode (autoencoderFeatureCodeNat n)) rNat >>= fun yNat =>
           Part.some (Nat.pair yNat (Nat.pair rNat (autoencoderFeatureCodeNat n))) := by
   have hOuter : Computable fun n : Nat => n.unpair.1 := by
     exact Computable.fst.comp Computable.unpair
-  have hMapCode : Computable fun n => Denumerable.ofNat Code (autoencoderMapCodeNat n) := by
-    exact (Computable.ofNat Code).comp autoencoderMapCodeNat_computable
+  have hMapCode : Computable fun n => storedProgramCode (autoencoderMapCodeNat n) := by
+    exact storedProgramCode_computable.comp autoencoderMapCodeNat_computable
   have hEvalMap : _root_.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (autoencoderMapCodeNat n)) n.unpair.1 := by
+      Code.eval (storedProgramCode (autoencoderMapCodeNat n)) n.unpair.1 := by
     exact Code.eval_part.comp hMapCode hOuter
   have hFeatureCode : Computable fun p : Nat × Nat =>
-      Denumerable.ofNat Code (autoencoderFeatureCodeNat p.1) := by
-    exact (Computable.ofNat Code).comp
+      storedProgramCode (autoencoderFeatureCodeNat p.1) := by
+    exact storedProgramCode_computable.comp
       (autoencoderFeatureCodeNat_computable.comp Computable.fst)
   have hFeatureInput : Computable fun p : Nat × Nat => p.2 := by
     exact Computable.snd
   have hEvalFeature : _root_.Partrec fun p : Nat × Nat =>
-      Code.eval (Denumerable.ofNat Code (autoencoderFeatureCodeNat p.1)) p.2 := by
+      Code.eval (storedProgramCode (autoencoderFeatureCodeNat p.1)) p.2 := by
     exact Code.eval_part.comp hFeatureCode hFeatureInput
   have hPack : _root_.Partrec₂ fun n rNat =>
-      Code.eval (Denumerable.ofNat Code (autoencoderFeatureCodeNat n)) rNat >>= fun yNat =>
+      Code.eval (storedProgramCode (autoencoderFeatureCodeNat n)) rNat >>= fun yNat =>
         Part.some (Nat.pair yNat (Nat.pair rNat (autoencoderFeatureCodeNat n))) := by
     have hOut : Computable₂ fun (p : Nat × Nat) (yNat : Nat) =>
         Nat.pair yNat (Nat.pair p.2 (autoencoderFeatureCodeNat p.1)) := by
@@ -109,8 +109,8 @@ private theorem evalAutoencoderInterpreter_partrec :
 theorem exists_autoencoderInterpreterCode :
     ∃ c : Code, ∀ n : Nat,
       Code.eval c n =
-        Code.eval (Denumerable.ofNat Code (autoencoderMapCodeNat n)) n.unpair.1 >>= fun rNat =>
-          Code.eval (Denumerable.ofNat Code (autoencoderFeatureCodeNat n)) rNat >>= fun yNat =>
+        Code.eval (storedProgramCode (autoencoderMapCodeNat n)) n.unpair.1 >>= fun rNat =>
+          Code.eval (storedProgramCode (autoencoderFeatureCodeNat n)) rNat >>= fun yNat =>
             Part.some (Nat.pair yNat (Nat.pair rNat (autoencoderFeatureCodeNat n))) := by
   obtain ⟨c, hc⟩ := Code.exists_code.1 evalAutoencoderInterpreter_partrec
   exact ⟨c, fun n => by simpa using congrFun hc n⟩
@@ -122,8 +122,8 @@ noncomputable def autoencoderInterpreterCode : Code :=
 
 theorem eval_autoencoderInterpreterCode (n : Nat) :
     Code.eval autoencoderInterpreterCode n =
-      Code.eval (Denumerable.ofNat Code (autoencoderMapCodeNat n)) n.unpair.1 >>= fun rNat =>
-        Code.eval (Denumerable.ofNat Code (autoencoderFeatureCodeNat n)) rNat >>= fun yNat =>
+      Code.eval (storedProgramCode (autoencoderMapCodeNat n)) n.unpair.1 >>= fun rNat =>
+        Code.eval (storedProgramCode (autoencoderFeatureCodeNat n)) rNat >>= fun yNat =>
           Part.some (Nat.pair yNat (Nat.pair rNat (autoencoderFeatureCodeNat n))) :=
   Classical.choose_spec exists_autoencoderInterpreterCode n
 
@@ -152,9 +152,9 @@ noncomputable def autoencoderInterpreter : Program :=
   constructor
   · intro h
     have h' :
-        (Code.eval (Denumerable.ofNat Code (BitString.toNatExact g)) (BitString.toNatExact x) >>=
+        (Code.eval (storedProgramCode (BitString.toNatExact g)) (BitString.toNatExact x) >>=
           fun rNat =>
-            Code.eval (Denumerable.ofNat Code (BitString.toNatExact f)) rNat >>= fun yNat =>
+            Code.eval (storedProgramCode (BitString.toNatExact f)) rNat >>= fun yNat =>
               Part.some (Nat.pair yNat (Nat.pair rNat (BitString.toNatExact f)))) =
           Part.some
             (Nat.pair (BitString.toNatExact y)
@@ -163,26 +163,26 @@ noncomputable def autoencoderInterpreter : Program :=
         autoencoderDecoded, autoencoderPayload, autoencoderOutput, hg, hfcode] using h
     have h'' :
         ∃ rNat,
-          rNat ∈ Code.eval (Denumerable.ofNat Code (BitString.toNatExact g)) (BitString.toNatExact x) ∧
+          rNat ∈ Code.eval (storedProgramCode (BitString.toNatExact g)) (BitString.toNatExact x) ∧
             Nat.pair (BitString.toNatExact y)
                 (Nat.pair (BitString.toNatExact r) (BitString.toNatExact f')) ∈
-              (Code.eval (Denumerable.ofNat Code (BitString.toNatExact f)) rNat >>= fun yNat =>
+              (Code.eval (storedProgramCode (BitString.toNatExact f)) rNat >>= fun yNat =>
                 Part.some (Nat.pair yNat (Nat.pair rNat (BitString.toNatExact f)))) := by
       simpa [Bind.bind, Part.eq_some_iff, Part.mem_bind_iff] using h'
     rcases h'' with ⟨rNat, hrMem, hrest⟩
     have hrest' :
         ∃ yNat,
-          yNat ∈ Code.eval (Denumerable.ofNat Code (BitString.toNatExact f)) rNat ∧
+          yNat ∈ Code.eval (storedProgramCode (BitString.toNatExact f)) rNat ∧
             Nat.pair (BitString.toNatExact y)
                 (Nat.pair (BitString.toNatExact r) (BitString.toNatExact f')) ∈
               Part.some (Nat.pair yNat (Nat.pair rNat (BitString.toNatExact f))) := by
       simpa [Bind.bind, Part.mem_bind_iff] using hrest
     rcases hrest' with ⟨yNat, hyMem, hpackMem⟩
     have hrNat :
-        Code.eval (Denumerable.ofNat Code (BitString.toNatExact g)) (BitString.toNatExact x) =
+        Code.eval (storedProgramCode (BitString.toNatExact g)) (BitString.toNatExact x) =
           Part.some rNat := Part.eq_some_iff.2 hrMem
     have hyNat :
-        Code.eval (Denumerable.ofNat Code (BitString.toNatExact f)) rNat = Part.some yNat :=
+        Code.eval (storedProgramCode (BitString.toNatExact f)) rNat = Part.some yNat :=
       Part.eq_some_iff.2 hyMem
     have hpack :
         Nat.pair (BitString.toNatExact y)
@@ -203,13 +203,13 @@ noncomputable def autoencoderInterpreter : Program :=
       by simpa [runs, programToCode, hpairInner.1, hpairOuter.1] using hyNat⟩
   · rintro ⟨rfl, hgRuns, hfRuns⟩
     have hg' :
-        Code.eval (Denumerable.ofNat Code (BitString.toNatExact g)) (BitString.toNatExact x) =
+        Code.eval (programToCode g) (BitString.toNatExact x) =
           Part.some (BitString.toNatExact r) := by
-      simpa [runs, programToCode] using hgRuns
+      simpa [runs] using hgRuns
     have hf' :
-        Code.eval (Denumerable.ofNat Code (BitString.toNatExact f')) (BitString.toNatExact r) =
+        Code.eval (programToCode f') (BitString.toNatExact r) =
           Part.some (BitString.toNatExact y) := by
-      simpa [runs, programToCode] using hfRuns
+      simpa [runs] using hfRuns
     rw [eval_autoencoderInterpreterCode]
     simp [autoencoderMapCodeNat, autoencoderFeatureCodeNat, autoencoderDecoded, autoencoderPayload,
       autoencoderOutput]

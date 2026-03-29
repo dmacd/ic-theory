@@ -118,7 +118,7 @@ theorem prefixRuns_of_prefixOutput_eq_some {p input output : Program}
 
 /-- Bounded evaluation of a plain program at fuel `k`, returning an exact bitstring output when
 the evaluator succeeds within that bound. -/
-def prefixOutputAtFuel (k : Nat) (p input : Program) : Option Program :=
+noncomputable def prefixOutputAtFuel (k : Nat) (p input : Program) : Option Program :=
   (Nat.Partrec.Code.evaln k (programToCode p) (BitString.toNatExact input)).map BitString.ofNatExact
 
 theorem prefixOutputAtFuel_sound {k : Nat} {p input output : Program}
@@ -291,8 +291,7 @@ private theorem prefixOutputAtFuel_primrec :
         ((a.1, programToCode a.2.1), BitString.toNatExact a.2.2) from ?_)
     refine Primrec.pair ?_ (BitString.toNatExact_primrec.comp (Primrec.snd.comp Primrec.snd))
     exact Primrec.pair Primrec.fst
-      ((Primrec.ofNat Nat.Partrec.Code).comp
-        (BitString.toNatExact_primrec.comp (Primrec.fst.comp Primrec.snd)))
+      (programToCode_primrec.comp (Primrec.fst.comp Primrec.snd))
   exact (Primrec.option_map hEvaln
     ((BitString.ofNatExact_primrec.comp Primrec.snd).to₂)).of_eq fun a => by
       cases a with
@@ -589,7 +588,7 @@ theorem length_jointRightOutputsUpToLength_le (x : Program) (n : Nat) :
 
 /-- The `t`-th joint-right discovery attempt, using `t.unpair.1` as bounded-evaluation fuel and
 `t.unpair.2` as an index into the finite witness family. -/
-def jointRightCandidateAtStep (x : Program) (n t : Nat) : Option Program :=
+noncomputable def jointRightCandidateAtStep (x : Program) (n t : Nat) : Option Program :=
   ((prefixWitnessPairsUpToLength n)[t.unpair.2]?).bind fun w =>
     (prefixOutputAtFuel t.unpair.1 w.1 (packedInput [] w.2)).bind fun z =>
       let xy := unpackInput z
@@ -638,7 +637,7 @@ theorem jointRightCandidateAtStep_complete {x y : Program} {n : Nat}
 
 /-- The same bounded witness/fuel scan, but returning the packed joint output directly before any
 left-component filtering. -/
-def jointPackedCandidateAtStep (n t : Nat) : Option Program :=
+noncomputable def jointPackedCandidateAtStep (n t : Nat) : Option Program :=
   ((prefixWitnessPairsUpToLength n)[t.unpair.2]?).bind fun w =>
     prefixOutputAtFuel t.unpair.1 w.1 (packedInput [] w.2)
 
@@ -839,7 +838,7 @@ theorem mem_appendIfNew_iff {xs : List Program} {oy : Option Program} {y : Progr
 
 /-- Discovery-order list of distinct right outputs found by scanning the first `t` many
 joint-right discovery attempts. -/
-def jointRightDiscoveredUpToStep (x : Program) (n : Nat) : Nat → List Program
+noncomputable def jointRightDiscoveredUpToStep (x : Program) (n : Nat) : Nat → List Program
   | 0 => []
   | t + 1 =>
       appendIfNew (jointRightDiscoveredUpToStep x n t) (jointRightCandidateAtStep x n t)
@@ -1010,7 +1009,7 @@ private theorem jointRightDiscoveredUpToStep_computable :
   jointRightDiscoveredUpToStep_primrec.to_comp
 
 /-- Search step for the concrete bounded right-output enumerator. -/
-private def jointRightSearchStep (a : Program × Nat × Nat) (t : Nat) : Option Program :=
+private noncomputable def jointRightSearchStep (a : Program × Nat × Nat) (t : Nat) : Option Program :=
   (jointRightDiscoveredUpToStep a.1 a.2.1 t)[a.2.2]?
 
 private theorem jointRightSearchStep_primrec : Primrec₂ jointRightSearchStep := by
@@ -1049,7 +1048,7 @@ private theorem jointRightArgsOfNat_computable : Computable jointRightArgsOfNat 
     (BitString.toNatExact_computable.comp (Computable.fst.comp hdecoded))
     (BitString.toNatExact_computable.comp (Computable.snd.comp hdecoded))
 
-private def jointRightSearchStepNat (inputNat t : Nat) : Option Nat :=
+private noncomputable def jointRightSearchStepNat (inputNat t : Nat) : Option Nat :=
   (jointRightSearchStep (jointRightArgsOfNat inputNat) t).map BitString.toNatExact
 
 private theorem jointRightSearchStepNat_computable : Computable₂ jointRightSearchStepNat := by
@@ -1256,7 +1255,7 @@ theorem exists_jointLeftIndex_of_mem {x : Program} {n m : Nat}
 
 /-- Discovery attempt for the heavy-left family: scan one packed joint output candidate, then test
 whether its left component has already accumulated at least `2^m` distinct right partners. -/
-def jointLeftCandidateAtStep (n m q : Nat) : Option Program :=
+noncomputable def jointLeftCandidateAtStep (n m q : Nat) : Option Program :=
   (jointPackedCandidateAtStep n q.unpair.1).bind fun z =>
     let x := (unpackInput z).1
     if 2 ^ m ≤ (jointRightDiscoveredUpToStep x n q.unpair.2).length then some x else none
@@ -1308,7 +1307,7 @@ theorem jointLeftCandidateAtStep_complete {x : Program} {n m : Nat}
 
 /-- Discovery-order list of distinct heavy-left outputs found by scanning the first `r` many
 heavy-left discovery attempts. -/
-def jointLeftDiscoveredUpToStep (n m : Nat) : Nat → List Program
+noncomputable def jointLeftDiscoveredUpToStep (n m : Nat) : Nat → List Program
   | 0 => []
   | r + 1 =>
       appendIfNew (jointLeftDiscoveredUpToStep n m r) (jointLeftCandidateAtStep n m r)
@@ -1484,7 +1483,7 @@ private theorem jointLeftDiscoveredUpToStep_getElem?_mono {n m r s i : Nat} {x :
       exact getElem?_appendIfNew_of_getElem? ih
 
 /-- Search step for the concrete heavy-left enumerator. -/
-private def jointLeftSearchStep (a : Nat × Nat × Nat) (r : Nat) : Option Program :=
+private noncomputable def jointLeftSearchStep (a : Nat × Nat × Nat) (r : Nat) : Option Program :=
   (jointLeftDiscoveredUpToStep a.1 a.2.1 r)[a.2.2]?
 
 private theorem jointLeftSearchStep_primrec : Primrec₂ jointLeftSearchStep := by
@@ -1527,7 +1526,7 @@ private theorem jointLeftArgsOfNat_computable : Computable jointLeftArgsOfNat :=
     (BitString.toNatExact_computable.comp (Computable.fst.comp hinner))
     (BitString.toNatExact_computable.comp (Computable.snd.comp hinner))
 
-private def jointLeftSearchStepNat (inputNat r : Nat) : Option Nat :=
+private noncomputable def jointLeftSearchStepNat (inputNat r : Nat) : Option Nat :=
   (jointLeftSearchStep (jointLeftArgsOfNat inputNat) r).map BitString.toNatExact
 
 private theorem jointLeftSearchStepNat_computable : Computable₂ jointLeftSearchStepNat := by
@@ -1965,7 +1964,7 @@ private theorem compressionCondition_primrec :
 /-- One bounded search attempt for a residual witnessing that `f` is a feature of `x`. The stage
 parameter `q` splits into execution fuel and a candidate residual index. Successful attempts output
 the packed pair `⟨r, f⟩`. -/
-def featureResidualPairCandidateAtStep (f x : Program) (q : Nat) : Option Program :=
+noncomputable def featureResidualPairCandidateAtStep (f x : Program) (q : Nat) : Option Program :=
   ((BitString.allUpToLength (BitString.blen x))[q.unpair.2]?).bind fun r =>
     (prefixOutputAtFuel q.unpair.1 f r).bind fun y =>
       if y = x then
@@ -2079,7 +2078,7 @@ theorem featureResidualPairCandidateAtStep_complete {f x r : Program}
 
 /-- Discovery-order list of distinct residual pairs `⟨r, f⟩` found by scanning the first `t`
 many residual-search attempts for the fixed feature/input pair `(f, x)`. -/
-def featureResidualPairsDiscoveredUpToStep (f x : Program) : Nat → List Program
+noncomputable def featureResidualPairsDiscoveredUpToStep (f x : Program) : Nat → List Program
   | 0 => []
   | t + 1 =>
       appendIfNew (featureResidualPairsDiscoveredUpToStep f x t)
@@ -2128,7 +2127,7 @@ private theorem featureResidualPairsDiscoveredUpToStep_getElem?_mono
       exact getElem?_appendIfNew_of_getElem? ih
 
 /-- The stabilized head of the discovered residual-pair list. -/
-private def featureResidualPairSearchStep (a : Program × Program) (t : Nat) : Option Program :=
+private noncomputable def featureResidualPairSearchStep (a : Program × Program) (t : Nat) : Option Program :=
   (featureResidualPairsDiscoveredUpToStep a.1 a.2 t)[0]?
 
 private theorem featureResidualPairsDiscoveredUpToStep_primrec :
@@ -2184,7 +2183,7 @@ private def featureResidualPairArgsOfNat (inputNat : Nat) : Program × Program :
 private theorem featureResidualPairArgsOfNat_computable : Computable featureResidualPairArgsOfNat := by
   exact unpackInput_computable.comp BitString.ofNatExact_computable
 
-private def featureResidualPairSearchStepNat (inputNat t : Nat) : Option Nat :=
+private noncomputable def featureResidualPairSearchStepNat (inputNat t : Nat) : Option Nat :=
   (featureResidualPairSearchStep (featureResidualPairArgsOfNat inputNat) t).map BitString.toNatExact
 
 @[simp] private theorem featureResidualPairSearchStepNat_packedInput (f x : Program) (t : Nat) :

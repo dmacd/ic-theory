@@ -66,6 +66,18 @@ theorem prefixConditionalComplexity_le_plainProgramLength {x input f : Program}
   unfold outerApplyInterpreterPrefixOverhead at *
   omega
 
+theorem prefixConditionalComplexity_logLe_plainProgramLength {x input f : Program}
+    (hf : runs f input x) :
+    LogLe (PrefixConditionalComplexity x input) (BitString.blen f) (BitString.blen f) := by
+  refine ⟨2, outerApplyInterpreterPrefixOverhead + 2, ?_⟩
+  have hupper := prefixConditionalComplexity_le_plainProgramLength hf
+  have hlog :
+      BitString.blen (BitString.ofNat (BitString.blen f)) ≤
+        logPenalty (BitString.blen f) + 1 := by
+    simpa using blen_ofNat_le_logPenalty_succ (BitString.blen f)
+  unfold outerApplyInterpreterPrefixOverhead logPenalty at *
+  omega
+
 theorem prefixConditionalComplexity_logLe_conditionalComplexity (x input : Program) :
     LogLe (PrefixConditionalComplexity x input)
       (ConditionalComplexity x input)
@@ -79,6 +91,37 @@ theorem prefixConditionalComplexity_logLe_conditionalComplexity (x input : Progr
         logPenalty (ConditionalComplexity x input) + 1 := by
     simpa using blen_ofNat_le_logPenalty_succ (ConditionalComplexity x input)
   unfold outerApplyInterpreterPrefixOverhead logPenalty at *
+  omega
+
+/-- Reverse bridge from prefix to plain conditional complexity: a shortest prefix description can
+be normalized to a direct prefix witness and then replayed as an ordinary program with only
+logarithmic overhead. -/
+theorem conditionalComplexity_logLe_prefixConditionalComplexity (x input : Program) :
+    LogLe (ConditionalComplexity x input)
+      (PrefixConditionalComplexity x input)
+      (PrefixConditionalComplexity x input) := by
+  obtain ⟨q, hqLen, hqRuns⟩ := exists_program_forPrefixConditionalComplexity x input
+  let q' : Program := BitString.pair replayPrefixInterpreter (BitString.e2 q)
+  let p : Program := prefixReplayPackedProgram q'
+  have hq'Runs : PrefixRuns q' input x :=
+    prefixRuns_replayPrefixInterpreter_of_prefixRuns hqRuns
+  have hpCore : runs replayPrefixInterpreter (packedInput input q) x :=
+    runs_replayPrefixInterpreter_of_prefixRuns hqRuns
+  have hpRuns : runs p input x := by
+    dsimp [p, q']
+    simpa [replayPrefixInterpreter] using
+      (runs_prefixReplayPackedProgram_codeToProgram_iff replayPrefixInterpreterCode q input x).2 hpCore
+  have hplain : ConditionalComplexity x input ≤ BitString.blen p :=
+    conditionalComplexity_le_length hpRuns
+  dsimp [p, q'] at hplain
+  simp [prefixReplayPackedProgram, prefixReplaySentinel] at hplain
+  rw [hqLen] at hplain
+  have hlog :
+      BitString.blen (BitString.ofNat (PrefixConditionalComplexity x input)) ≤
+        logPenalty (PrefixConditionalComplexity x input) + 1 := by
+    simpa using blen_ofNat_le_logPenalty_succ (PrefixConditionalComplexity x input)
+  refine ⟨2, 2 * BitString.blen replayPrefixInterpreter + 8, ?_⟩
+  simp [prefixReplayPackedProgram, prefixReplaySentinel, logPenalty] at hlog ⊢
   omega
 
 theorem prefixComplexity_log_upper_of_le {x : Program} {n : Nat}

@@ -277,8 +277,7 @@ private theorem prefixOutputAtFuel_primrec :
         ((a.1, programToCode a.2.1), BitString.toNatExact a.2.2) from ?_)
     refine Primrec.pair ?_ (BitString.toNatExact_primrec.comp (Primrec.snd.comp Primrec.snd))
     exact Primrec.pair Primrec.fst
-      ((Primrec.ofNat Nat.Partrec.Code).comp
-        (BitString.toNatExact_primrec.comp (Primrec.fst.comp Primrec.snd)))
+      (programToCode_primrec.comp (Primrec.fst.comp Primrec.snd))
   exact (Primrec.option_map hEvaln
     ((BitString.ofNatExact_primrec.comp Primrec.snd).to₂)).of_eq fun a => by
       cases a with

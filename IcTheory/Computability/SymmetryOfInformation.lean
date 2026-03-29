@@ -65,32 +65,32 @@ private theorem jointUpperSecondCodeNat_computable : Computable jointUpperSecond
 
 private theorem evalJointUpper_partrec :
     Nat.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
           (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
-        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
             (Nat.pair xNat (jointUpperSecondResidualNat n)) >>= fun yNat =>
           Part.some (Nat.pair xNat yNat) := by
-  have hFirstCode : Computable fun n => Denumerable.ofNat Code (jointUpperFirstCodeNat n) := by
-    exact (Computable.ofNat Code).comp jointUpperFirstCodeNat_computable
+  have hFirstCode : Computable fun n => storedProgramCode (jointUpperFirstCodeNat n) := by
+    exact storedProgramCode_computable.comp jointUpperFirstCodeNat_computable
   have hFirstInput : Computable fun n => Nat.pair 0 (jointUpperResidualNat n) := by
     exact (Primrec₂.natPair.to_comp).comp (Computable.const 0) jointUpperResidualNat_computable
   have hEval₁ : _root_.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
         (Nat.pair 0 (jointUpperResidualNat n)) := by
     exact Code.eval_part.comp hFirstCode hFirstInput
   have hSecondCode : Computable fun p : Nat × Nat =>
-      Denumerable.ofNat Code (jointUpperSecondCodeNat p.1) := by
-    exact (Computable.ofNat Code).comp (jointUpperSecondCodeNat_computable.comp Computable.fst)
+      storedProgramCode (jointUpperSecondCodeNat p.1) := by
+    exact storedProgramCode_computable.comp (jointUpperSecondCodeNat_computable.comp Computable.fst)
   have hSecondInput : Computable fun p : Nat × Nat =>
       Nat.pair p.2 (jointUpperSecondResidualNat p.1) := by
     exact (Primrec₂.natPair.to_comp).comp Computable.snd
       (jointUpperSecondResidualNat_computable.comp Computable.fst)
   have hEval₂ : _root_.Partrec fun p : Nat × Nat =>
-      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat p.1))
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat p.1))
         (Nat.pair p.2 (jointUpperSecondResidualNat p.1)) := by
     exact Code.eval_part.comp hSecondCode hSecondInput
   have hPack : _root_.Partrec₂ fun n xNat =>
-      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
           (Nat.pair xNat (jointUpperSecondResidualNat n)) >>= fun yNat =>
         Part.some (Nat.pair xNat yNat) := by
     have hOut : Computable₂ fun (p : Nat × Nat) (yNat : Nat) => Nat.pair p.2 yNat := by
@@ -101,9 +101,9 @@ private theorem evalJointUpper_partrec :
 theorem exists_jointUpperInterpreterCode :
     ∃ c : Code, ∀ n : Nat,
       Code.eval c n =
-        Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+        Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
             (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
-          Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+          Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
               (Nat.pair xNat (jointUpperSecondResidualNat n)) >>= fun yNat =>
             Part.some (Nat.pair xNat yNat) := by
   obtain ⟨c, hc⟩ := Code.exists_code.1 evalJointUpper_partrec
@@ -116,9 +116,9 @@ noncomputable def jointUpperInterpreterCode : Code :=
 
 theorem eval_jointUpperInterpreterCode (n : Nat) :
     Code.eval jointUpperInterpreterCode n =
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
           (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
-        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
             (Nat.pair xNat (jointUpperSecondResidualNat n)) >>= fun yNat =>
           Part.some (Nat.pair xNat yNat) :=
   Classical.choose_spec exists_jointUpperInterpreterCode n
@@ -131,15 +131,15 @@ theorem jointUpperInterpreter_isJointUpperInterpreter :
     IsJointUpperInterpreter jointUpperInterpreter := by
   intro f s g r x y hf hg
   have hf' :
-      Code.eval (Denumerable.ofNat Code (BitString.toNatExact f))
+      Code.eval (programToCode f)
           (Nat.pair 0 (BitString.toNatExact s)) =
         Part.some (BitString.toNatExact x) := by
-    simpa [runs, programToCode, toNatExact_packedInput] using hf
+    simpa [runs, toNatExact_packedInput] using hf
   have hg' :
-      Code.eval (Denumerable.ofNat Code (BitString.toNatExact g))
+      Code.eval (programToCode g)
           (Nat.pair (BitString.toNatExact x) (BitString.toNatExact r)) =
         Part.some (BitString.toNatExact y) := by
-    simpa [runs, programToCode, toNatExact_packedInput] using hg
+    simpa [runs, toNatExact_packedInput] using hg
   rw [jointUpperInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
   simp [eval_jointUpperInterpreterCode, jointUpperFirstCodeNat, jointUpperResidualNat,
     jointUpperSecondCodeNat, jointUpperSecondResidualNat, jointUpperDecoded, JointUpperPayload,
@@ -155,31 +155,31 @@ def IsPostComposeInterpreter (u : Program) : Prop :=
 
 private theorem evalPostCompose_partrec :
     Nat.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
           (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
-        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
             (Nat.pair xNat (jointUpperSecondResidualNat n)) := by
-  have hFirstCode : Computable fun n => Denumerable.ofNat Code (jointUpperFirstCodeNat n) := by
-    exact (Computable.ofNat Code).comp jointUpperFirstCodeNat_computable
+  have hFirstCode : Computable fun n => storedProgramCode (jointUpperFirstCodeNat n) := by
+    exact storedProgramCode_computable.comp jointUpperFirstCodeNat_computable
   have hFirstInput : Computable fun n => Nat.pair 0 (jointUpperResidualNat n) := by
     exact (Primrec₂.natPair.to_comp).comp (Computable.const 0) jointUpperResidualNat_computable
   have hEval₁ : _root_.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
         (Nat.pair 0 (jointUpperResidualNat n)) := by
     exact Code.eval_part.comp hFirstCode hFirstInput
   have hSecondCode : Computable fun p : Nat × Nat =>
-      Denumerable.ofNat Code (jointUpperSecondCodeNat p.1) := by
-    exact (Computable.ofNat Code).comp (jointUpperSecondCodeNat_computable.comp Computable.fst)
+      storedProgramCode (jointUpperSecondCodeNat p.1) := by
+    exact storedProgramCode_computable.comp (jointUpperSecondCodeNat_computable.comp Computable.fst)
   have hSecondInput : Computable fun p : Nat × Nat =>
       Nat.pair p.2 (jointUpperSecondResidualNat p.1) := by
     exact (Primrec₂.natPair.to_comp).comp Computable.snd
       (jointUpperSecondResidualNat_computable.comp Computable.fst)
   have hEval₂ : _root_.Partrec fun p : Nat × Nat =>
-      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat p.1))
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat p.1))
         (Nat.pair p.2 (jointUpperSecondResidualNat p.1)) := by
     exact Code.eval_part.comp hSecondCode hSecondInput
   have hStep : _root_.Partrec₂ fun n xNat =>
-      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
         (Nat.pair xNat (jointUpperSecondResidualNat n)) := by
     simpa using hEval₂.to₂
   exact _root_.Partrec.nat_iff.1 (hEval₁.bind hStep)
@@ -187,9 +187,9 @@ private theorem evalPostCompose_partrec :
 theorem exists_postComposeInterpreterCode :
     ∃ c : Code, ∀ n : Nat,
       Code.eval c n =
-        Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+        Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
             (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
-          Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+          Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
               (Nat.pair xNat (jointUpperSecondResidualNat n)) := by
   obtain ⟨c, hc⟩ := Code.exists_code.1 evalPostCompose_partrec
   exact ⟨c, fun n => by simpa using congrFun hc n⟩
@@ -200,9 +200,9 @@ noncomputable def postComposeInterpreterCode : Code :=
 
 theorem eval_postComposeInterpreterCode (n : Nat) :
     Code.eval postComposeInterpreterCode n =
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
           (Nat.pair 0 (jointUpperResidualNat n)) >>= fun xNat =>
-        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
             (Nat.pair xNat (jointUpperSecondResidualNat n)) :=
   Classical.choose_spec exists_postComposeInterpreterCode n
 
@@ -215,15 +215,15 @@ theorem postComposeInterpreter_isPostComposeInterpreter :
     IsPostComposeInterpreter postComposeInterpreter := by
   intro f s g r x y hf hg
   have hf' :
-      Code.eval (Denumerable.ofNat Code (BitString.toNatExact f))
+      Code.eval (programToCode f)
           (Nat.pair 0 (BitString.toNatExact s)) =
         Part.some (BitString.toNatExact x) := by
-    simpa [runs, programToCode, toNatExact_packedInput] using hf
+    simpa [runs, toNatExact_packedInput] using hf
   have hg' :
-      Code.eval (Denumerable.ofNat Code (BitString.toNatExact g))
+      Code.eval (programToCode g)
           (Nat.pair (BitString.toNatExact x) (BitString.toNatExact r)) =
         Part.some (BitString.toNatExact y) := by
-    simpa [runs, programToCode, toNatExact_packedInput] using hg
+    simpa [runs, toNatExact_packedInput] using hg
   rw [postComposeInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
   simp [eval_postComposeInterpreterCode, jointUpperFirstCodeNat, jointUpperResidualNat,
     jointUpperSecondCodeNat, jointUpperSecondResidualNat, jointUpperDecoded, JointUpperPayload,
@@ -240,34 +240,33 @@ def IsConditionalPostComposeInterpreter (u : Program) : Prop :=
 
 private theorem evalConditionalPostCompose_partrec :
     Nat.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
           (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun xNat =>
-        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
             (Nat.pair xNat n.unpair.1) := by
   have hOuter : Computable fun n : Nat => n.unpair.1 := by
     exact Computable.fst.comp Computable.unpair
-  have hFirstCode : Computable fun n => Denumerable.ofNat Code (jointUpperFirstCodeNat n) := by
-    exact (Computable.ofNat Code).comp jointUpperFirstCodeNat_computable
+  have hFirstCode : Computable fun n => storedProgramCode (jointUpperFirstCodeNat n) := by
+    exact storedProgramCode_computable.comp jointUpperFirstCodeNat_computable
   have hFirstInput : Computable fun n => Nat.pair n.unpair.1 (jointUpperResidualNat n) := by
     exact (Primrec₂.natPair.to_comp).comp hOuter jointUpperResidualNat_computable
   have hEval₁ : _root_.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
         (Nat.pair n.unpair.1 (jointUpperResidualNat n)) := by
     exact Code.eval_part.comp hFirstCode hFirstInput
   have hSecondCode : Computable fun p : Nat × Nat =>
-      Denumerable.ofNat Code (jointUpperSecondCodeNat p.1) := by
-    exact (Computable.ofNat Code).comp
-      (jointUpperSecondCodeNat_computable.comp Computable.fst)
+      storedProgramCode (jointUpperSecondCodeNat p.1) := by
+    exact storedProgramCode_computable.comp (jointUpperSecondCodeNat_computable.comp Computable.fst)
   have hSecondInput : Computable fun p : Nat × Nat =>
       Nat.pair p.2 p.1.unpair.1 := by
     exact (Primrec₂.natPair.to_comp).comp Computable.snd
       (Computable.fst.comp (Computable.unpair.comp Computable.fst))
   have hEval₂ : _root_.Partrec fun p : Nat × Nat =>
-      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat p.1))
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat p.1))
         (Nat.pair p.2 p.1.unpair.1) := by
     exact Code.eval_part.comp hSecondCode hSecondInput
   have hStep : _root_.Partrec₂ fun n xNat =>
-      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
         (Nat.pair xNat n.unpair.1) := by
     simpa using hEval₂.to₂
   exact _root_.Partrec.nat_iff.1 (hEval₁.bind hStep)
@@ -275,9 +274,9 @@ private theorem evalConditionalPostCompose_partrec :
 theorem exists_conditionalPostComposeInterpreterCode :
     ∃ c : Code, ∀ n : Nat,
       Code.eval c n =
-        Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+        Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
             (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun xNat =>
-          Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+          Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
               (Nat.pair xNat n.unpair.1) := by
   obtain ⟨c, hc⟩ := Code.exists_code.1 evalConditionalPostCompose_partrec
   exact ⟨c, fun n => by simpa using congrFun hc n⟩
@@ -289,9 +288,9 @@ noncomputable def conditionalPostComposeInterpreterCode : Code :=
 
 theorem eval_conditionalPostComposeInterpreterCode (n : Nat) :
     Code.eval conditionalPostComposeInterpreterCode n =
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
           (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun xNat =>
-        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
             (Nat.pair xNat n.unpair.1) :=
   Classical.choose_spec exists_conditionalPostComposeInterpreterCode n
 
@@ -303,15 +302,15 @@ theorem conditionalPostComposeInterpreter_isConditionalPostComposeInterpreter :
     IsConditionalPostComposeInterpreter conditionalPostComposeInterpreter := by
   intro f s g input x y hf hg
   have hf' :
-      Code.eval (Denumerable.ofNat Code (BitString.toNatExact f))
+      Code.eval (programToCode f)
           (Nat.pair (BitString.toNatExact input) (BitString.toNatExact s)) =
         Part.some (BitString.toNatExact x) := by
-    simpa [runs, programToCode, toNatExact_packedInput] using hf
+    simpa [runs, toNatExact_packedInput] using hf
   have hg' :
-      Code.eval (Denumerable.ofNat Code (BitString.toNatExact g))
+      Code.eval (programToCode g)
           (Nat.pair (BitString.toNatExact x) (BitString.toNatExact input)) =
         Part.some (BitString.toNatExact y) := by
-    simpa [runs, programToCode, toNatExact_packedInput] using hg
+    simpa [runs, toNatExact_packedInput] using hg
   rw [conditionalPostComposeInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
   simp [eval_conditionalPostComposeInterpreterCode, jointUpperFirstCodeNat, jointUpperResidualNat,
     jointUpperSecondCodeNat, jointUpperDecoded, JointUpperPayload, hf', hg']
@@ -327,34 +326,33 @@ def IsConditionalComposeInterpreter (u : Program) : Prop :=
 
 private theorem evalConditionalCompose_partrec :
     Nat.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
           (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun zNat =>
-        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
             (Nat.pair zNat (jointUpperSecondResidualNat n)) := by
   have hOuter : Computable fun n : Nat => n.unpair.1 := by
     exact Computable.fst.comp Computable.unpair
-  have hFirstCode : Computable fun n => Denumerable.ofNat Code (jointUpperFirstCodeNat n) := by
-    exact (Computable.ofNat Code).comp jointUpperFirstCodeNat_computable
+  have hFirstCode : Computable fun n => storedProgramCode (jointUpperFirstCodeNat n) := by
+    exact storedProgramCode_computable.comp jointUpperFirstCodeNat_computable
   have hFirstInput : Computable fun n => Nat.pair n.unpair.1 (jointUpperResidualNat n) := by
     exact (Primrec₂.natPair.to_comp).comp hOuter jointUpperResidualNat_computable
   have hEval₁ : _root_.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
         (Nat.pair n.unpair.1 (jointUpperResidualNat n)) := by
     exact Code.eval_part.comp hFirstCode hFirstInput
   have hSecondCode : Computable fun p : Nat × Nat =>
-      Denumerable.ofNat Code (jointUpperSecondCodeNat p.1) := by
-    exact (Computable.ofNat Code).comp
-      (jointUpperSecondCodeNat_computable.comp Computable.fst)
+      storedProgramCode (jointUpperSecondCodeNat p.1) := by
+    exact storedProgramCode_computable.comp (jointUpperSecondCodeNat_computable.comp Computable.fst)
   have hSecondInput : Computable fun p : Nat × Nat =>
       Nat.pair p.2 (jointUpperSecondResidualNat p.1) := by
     exact (Primrec₂.natPair.to_comp).comp Computable.snd
       (jointUpperSecondResidualNat_computable.comp Computable.fst)
   have hEval₂ : _root_.Partrec fun p : Nat × Nat =>
-      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat p.1))
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat p.1))
         (Nat.pair p.2 (jointUpperSecondResidualNat p.1)) := by
     exact Code.eval_part.comp hSecondCode hSecondInput
   have hStep : _root_.Partrec₂ fun n zNat =>
-      Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
         (Nat.pair zNat (jointUpperSecondResidualNat n)) := by
     simpa using hEval₂.to₂
   exact _root_.Partrec.nat_iff.1 (hEval₁.bind hStep)
@@ -362,9 +360,9 @@ private theorem evalConditionalCompose_partrec :
 theorem exists_conditionalComposeInterpreterCode :
     ∃ c : Code, ∀ n : Nat,
       Code.eval c n =
-        Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+        Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
             (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun zNat =>
-          Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+          Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
               (Nat.pair zNat (jointUpperSecondResidualNat n)) := by
   obtain ⟨c, hc⟩ := Code.exists_code.1 evalConditionalCompose_partrec
   exact ⟨c, fun n => by simpa using congrFun hc n⟩
@@ -375,9 +373,9 @@ noncomputable def conditionalComposeInterpreterCode : Code :=
 
 theorem eval_conditionalComposeInterpreterCode (n : Nat) :
     Code.eval conditionalComposeInterpreterCode n =
-      Code.eval (Denumerable.ofNat Code (jointUpperFirstCodeNat n))
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
           (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun zNat =>
-        Code.eval (Denumerable.ofNat Code (jointUpperSecondCodeNat n))
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
             (Nat.pair zNat (jointUpperSecondResidualNat n)) :=
   Classical.choose_spec exists_conditionalComposeInterpreterCode n
 
@@ -390,15 +388,15 @@ theorem conditionalComposeInterpreter_isConditionalComposeInterpreter :
     IsConditionalComposeInterpreter conditionalComposeInterpreter := by
   intro f s g r input z y hf hg
   have hf' :
-      Code.eval (Denumerable.ofNat Code (BitString.toNatExact f))
+      Code.eval (programToCode f)
           (Nat.pair (BitString.toNatExact input) (BitString.toNatExact s)) =
         Part.some (BitString.toNatExact z) := by
-    simpa [runs, programToCode, toNatExact_packedInput] using hf
+    simpa [runs, toNatExact_packedInput] using hf
   have hg' :
-      Code.eval (Denumerable.ofNat Code (BitString.toNatExact g))
+      Code.eval (programToCode g)
           (Nat.pair (BitString.toNatExact z) (BitString.toNatExact r)) =
         Part.some (BitString.toNatExact y) := by
-    simpa [runs, programToCode, toNatExact_packedInput] using hg
+    simpa [runs, toNatExact_packedInput] using hg
   rw [conditionalComposeInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
   simp [eval_conditionalComposeInterpreterCode, jointUpperFirstCodeNat, jointUpperResidualNat,
     jointUpperSecondCodeNat, jointUpperSecondResidualNat, jointUpperDecoded, JointUpperPayload,
@@ -437,10 +435,10 @@ private theorem ignoreConditionPrefixCodeNat_computable :
 
 private theorem evalIgnoreConditionPrefix_partrec :
     Nat.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code (ignoreConditionPrefixCodeNat n))
+      Code.eval (storedProgramCode (ignoreConditionPrefixCodeNat n))
         (Nat.pair 0 (ignoreConditionPrefixResidualNat n)) := by
-  have hCode : Computable fun n => Denumerable.ofNat Code (ignoreConditionPrefixCodeNat n) := by
-    exact (Computable.ofNat Code).comp ignoreConditionPrefixCodeNat_computable
+  have hCode : Computable fun n => storedProgramCode (ignoreConditionPrefixCodeNat n) := by
+    exact storedProgramCode_computable.comp ignoreConditionPrefixCodeNat_computable
   have hInput : Computable fun n => Nat.pair 0 (ignoreConditionPrefixResidualNat n) := by
     exact (Primrec₂.natPair.to_comp).comp (Computable.const 0) ignoreConditionPrefixResidualNat_computable
   exact _root_.Partrec.nat_iff.1 (Code.eval_part.comp hCode hInput)
@@ -448,7 +446,7 @@ private theorem evalIgnoreConditionPrefix_partrec :
 theorem exists_ignoreConditionPrefixInterpreterCode :
     ∃ c : Code, ∀ n : Nat,
       Code.eval c n =
-        Code.eval (Denumerable.ofNat Code (ignoreConditionPrefixCodeNat n))
+        Code.eval (storedProgramCode (ignoreConditionPrefixCodeNat n))
           (Nat.pair 0 (ignoreConditionPrefixResidualNat n)) := by
   obtain ⟨c, hc⟩ := Code.exists_code.1 evalIgnoreConditionPrefix_partrec
   exact ⟨c, fun n => by simpa using congrFun hc n⟩
@@ -460,7 +458,7 @@ noncomputable def ignoreConditionPrefixInterpreterCode : Code :=
 
 theorem eval_ignoreConditionPrefixInterpreterCode (n : Nat) :
     Code.eval ignoreConditionPrefixInterpreterCode n =
-      Code.eval (Denumerable.ofNat Code (ignoreConditionPrefixCodeNat n))
+      Code.eval (storedProgramCode (ignoreConditionPrefixCodeNat n))
         (Nat.pair 0 (ignoreConditionPrefixResidualNat n)) :=
   Classical.choose_spec exists_ignoreConditionPrefixInterpreterCode n
 
@@ -473,10 +471,10 @@ theorem ignoreConditionPrefixInterpreter_isIgnoreConditionPrefixInterpreter :
     IsIgnoreConditionPrefixInterpreter ignoreConditionPrefixInterpreter := by
   intro f s input x hf
   have hf' :
-      Code.eval (Denumerable.ofNat Code (BitString.toNatExact f))
+      Code.eval (programToCode f)
           (Nat.pair 0 (BitString.toNatExact s)) =
         Part.some (BitString.toNatExact x) := by
-    simpa [runs, programToCode, toNatExact_packedInput] using hf
+    simpa [runs, toNatExact_packedInput] using hf
   rw [ignoreConditionPrefixInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
   simp [eval_ignoreConditionPrefixInterpreterCode, ignoreConditionPrefixCodeNat,
     ignoreConditionPrefixResidualNat, ignoreConditionPrefixDecoded, hf',
@@ -833,6 +831,33 @@ theorem prefixConditionalComplexity_logLe_of_runs {f r x : Program}
       conditionalPostComposeInterpreter_isConditionalPostComposeInterpreter
       (by simpa using (runs_applyInterpreter_iff f r x).2 hf))
     hscale
+
+/-- Running a program `f` on input `r` also gives a plain conditional description of the output
+up to the same logarithmic overhead, by first normalizing plain descriptions into the prefix
+layer and then applying the fixed post-composition bound. -/
+theorem conditionalComplexity_logLe_of_runs {f r x : Program}
+    (hf : runs f r x) :
+    LogLe (ConditionalComplexity x r)
+      (PrefixConditionalComplexity f r)
+      (BitString.blen f) := by
+  have hplain :
+      LogLe (ConditionalComplexity x r)
+        (PrefixConditionalComplexity x r)
+        (PrefixConditionalComplexity x r) :=
+    conditionalComplexity_logLe_prefixConditionalComplexity x r
+  have hscale :
+      LogLe (PrefixConditionalComplexity x r)
+        (BitString.blen f)
+        (BitString.blen f) :=
+    logLe_trans
+      (prefixConditionalComplexity_logLe_of_runs hf)
+      (prefixConditionalComplexity_log_upper f r)
+  have hplain' :
+      LogLe (ConditionalComplexity x r)
+        (PrefixConditionalComplexity x r)
+        (BitString.blen f) :=
+    logLe_of_scale_logLe hplain hscale
+  exact logLe_trans hplain' (prefixConditionalComplexity_logLe_of_runs hf)
 
 /-- One-sided swap invariance for joint prefix complexity. -/
 theorem jointSwapLogLe (x y : Program) :

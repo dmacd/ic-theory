@@ -600,7 +600,7 @@ private theorem storedSchemeStepRestPayloadNat_computable :
 /-- One machine step of the `D_s` interpreter: decode the next stored feature from the payload,
 run it on the current string, and update the residual payload. -/
 private def storedSchemeStepPart (state : Nat × Nat) : Part (Nat × Nat) :=
-  (Code.eval (Denumerable.ofNat Code (storedSchemeStepCodeNat state)) state.1).map
+  (Code.eval (storedProgramCode (storedSchemeStepCodeNat state)) state.1).map
     (fun nextNat => (nextNat, storedSchemeStepRestPayloadNat state))
 
 /-- Pure loop used by the concrete `D_s` interpreter. -/
@@ -610,16 +610,16 @@ private def storedSchemeLoop : Nat → Nat × Nat → Part (Nat × Nat)
 
 private theorem storedSchemeExecStepState_partrec :
     _root_.Partrec fun q : Nat × (Nat × Nat) =>
-      (Code.eval (Denumerable.ofNat Code (storedSchemeStepCodeNat q.2)) q.2.1).map
+      (Code.eval (storedProgramCode (storedSchemeStepCodeNat q.2)) q.2.1).map
         (fun nextNat => (nextNat, storedSchemeStepRestPayloadNat q.2)) := by
   have hCode : Computable fun q : Nat × (Nat × Nat) =>
-      Denumerable.ofNat Code (storedSchemeStepCodeNat q.2) := by
-    exact (Computable.ofNat Code).comp
+      storedProgramCode (storedSchemeStepCodeNat q.2) := by
+    exact storedProgramCode_computable.comp
       (storedSchemeStepCodeNat_computable.comp Computable.snd)
   have hInput : Computable fun q : Nat × (Nat × Nat) => q.2.1 := by
     exact Computable.fst.comp Computable.snd
   have hEval : _root_.Partrec fun q : Nat × (Nat × Nat) =>
-      Code.eval (Denumerable.ofNat Code (storedSchemeStepCodeNat q.2)) q.2.1 := by
+      Code.eval (storedProgramCode (storedSchemeStepCodeNat q.2)) q.2.1 := by
     exact Code.eval_part.comp hCode hInput
   have hOut : Computable₂
       (fun (q : Nat × (Nat × Nat)) (nextNat : Nat) =>
@@ -631,7 +631,7 @@ private theorem storedSchemeExecStepState_partrec :
 
 private theorem storedSchemeExecStep_partrec :
     _root_.Partrec₂ fun (_ : Nat) (q : Nat × (Nat × Nat)) =>
-      (Code.eval (Denumerable.ofNat Code (storedSchemeStepCodeNat q.2)) q.2.1).map
+      (Code.eval (storedProgramCode (storedSchemeStepCodeNat q.2)) q.2.1).map
         (fun nextNat => (nextNat, storedSchemeStepRestPayloadNat q.2)) := by
   simpa using (storedSchemeExecStepState_partrec.comp Computable.snd).to₂
 
@@ -639,7 +639,7 @@ private theorem storedSchemeLoop_eq_natRec (count : Nat) (state : Nat × Nat) :
     storedSchemeLoop count state =
       Nat.rec (Part.some state)
         (fun _ IH => IH.bind fun st =>
-          (Code.eval (Denumerable.ofNat Code (storedSchemeStepCodeNat st)) st.1).map
+          (Code.eval (storedProgramCode (storedSchemeStepCodeNat st)) st.1).map
             (fun nextNat => (nextNat, storedSchemeStepRestPayloadNat st)))
         count := by
   induction count generalizing state with
@@ -657,7 +657,7 @@ private theorem storedSchemeInterpreterNat_partrec :
   have hLoop : _root_.Partrec fun n : Nat =>
       Nat.rec (Part.some (storedSchemeInitialState n))
         (fun _ IH => IH.bind fun st =>
-          (Code.eval (Denumerable.ofNat Code (storedSchemeStepCodeNat st)) st.1).map
+          (Code.eval (storedProgramCode (storedSchemeStepCodeNat st)) st.1).map
             (fun nextNat => (nextNat, storedSchemeStepRestPayloadNat st)))
         (storedSchemeStepCountNat n) := by
     exact _root_.Partrec.nat_rec storedSchemeStepCountNat_computable hBase
@@ -668,7 +668,7 @@ private theorem storedSchemeInterpreterNat_partrec :
       Part.map Prod.fst
         (Nat.rec (Part.some (storedSchemeInitialState n))
         (fun _ IH => IH.bind fun st =>
-          (Code.eval (Denumerable.ofNat Code (storedSchemeStepCodeNat st)) st.1).map
+          (Code.eval (storedProgramCode (storedSchemeStepCodeNat st)) st.1).map
             (fun nextNat => (nextNat, storedSchemeStepRestPayloadNat st)))
         (storedSchemeStepCountNat n)) := by
     exact _root_.Partrec.map hLoop hFst
@@ -783,7 +783,7 @@ private theorem executeStoredProgramListNat_append_singleton
       (Code.eval (programToCode f) currentNat).map
         (fun nextNat => (nextNat, BitString.toNatExact (exactProgramListPayload suffix []))) := by
   simp [storedSchemeStepPart, storedSchemeStepCodeNat, storedSchemeStepRestPayloadNat,
-    storedSchemeStepDecoded, exactProgramListPayload, programToCode]
+    storedSchemeStepDecoded, exactProgramListPayload, programToCode, additiveProgramToCode]
 
 private theorem storedSchemeLoop_exactProgramListPayload_append
     (storedFs suffix : List Program) (currentNat : Nat) :

@@ -101,6 +101,36 @@ theorem theorem31_of_cases {f x : Program}
   · exact theorem31_of_compressibleByMoreThan hshort hcompress
   · exact theorem31_of_prefixGap hshort hgap
 
+/-- Any string is either highly compressible past the universal-feature threshold, or it already
+lies in the prefix-gap branch needed for Theorems 3.1 and 3.2. The latter follows from the plain
+to prefix bridge together with the failure of `CompressibleByMoreThan`. -/
+theorem compressibleByMoreThan_or_prefixGap (x : Program) :
+    CompressibleByMoreThan universalFeatureConstant x ∨
+      LogLe (BitString.blen x) (PrefixComplexity x) (BitString.blen x) := by
+  by_cases hcompress : CompressibleByMoreThan universalFeatureConstant x
+  · exact Or.inl hcompress
+  · right
+    have hlen :
+        BitString.blen x ≤ Complexity x + universalFeatureConstant := by
+      unfold CompressibleByMoreThan at hcompress
+      exact Nat.le_of_not_lt hcompress
+    have hplain :
+        LogLe (BitString.blen x) (Complexity x) (BitString.blen x) := by
+      refine ⟨0, universalFeatureConstant, ?_⟩
+      simpa using hlen
+    have hprefix :
+        LogLe (Complexity x) (PrefixComplexity x) (BitString.blen x) := by
+      exact logLe_of_scale_logLe
+        (conditionalComplexity_logLe_prefixConditionalComplexity x [])
+        (prefixComplexity_log_upper x)
+    exact logLe_trans hplain hprefix
+
+/-- Theorem 3.1 in paper form. -/
+theorem theorem31 {f x : Program}
+    (hshort : IsShortestFeature runs f x) :
+    LogEq (PrefixComplexity f) (BitString.blen f) (BitString.blen x) := by
+  exact theorem31_of_cases hshort (compressibleByMoreThan_or_prefixGap x)
+
 /-- If `x` is prefix-incompressible up to logarithmic slack, then every feature of `x` carries
 high information in the sense needed for Lemma 3.3. -/
 theorem highInformationIn_of_feature_of_prefixGap {f x : Program}
@@ -418,6 +448,16 @@ theorem theorem32_of_cases {x : Program}
     refine ⟨hK, L, shortestFeaturePrefixCondBoundC x hgap,
       2 ^ (shortestFeaturePrefixCondBoundD x hgap + 1), hnodup, hmem, ?_⟩
     simpa using hlen
+
+/-- Theorem 3.2 in paper form. -/
+theorem theorem32 {x : Program} :
+    (∀ f : Program, IsShortestFeature runs f x →
+      LogLe (PrefixConditionalComplexity f x) 0 (BitString.blen x)) ∧
+    ∃ L : List Program, ∃ α β : Nat,
+      L.Nodup ∧
+      (∀ f : Program, f ∈ L ↔ IsShortestFeature runs f x) ∧
+      L.length ≤ (BitString.blen x + 1) ^ α * β := by
+  exact theorem32_of_cases (x := x) (compressibleByMoreThan_or_prefixGap x)
 
 end
 

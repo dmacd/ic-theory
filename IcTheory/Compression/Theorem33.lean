@@ -133,6 +133,33 @@ theorem theorem33_eq16_of_conditionalBridge
   unfold PrefixInformation featureGap at *
   omega
 
+/-- Additive form of Theorem 3.3 equation (16), with the plain-to-prefix bridge now discharged
+concretely from the residual witness `runs f r x`. -/
+theorem theorem33_eq16_additive
+    {fStar f g x r : Program}
+    (hshort : IsShortestFeature runs fStar x)
+    (hr : runs g x r)
+    (hf : runs f r x)
+    (hcomp : CompressionCondition f r x) :
+    LogLe (PrefixComplexity f)
+      (featureGap f fStar + PrefixConditionalComplexity f r)
+      (BitString.blen f) := by
+  exact theorem33_eq16_additive_of_conditionalBridge hshort hr hf hcomp
+    (conditionalComplexity_logLe_of_runs hf)
+
+/-- Paper-facing information form of Theorem 3.3 equation (16). -/
+theorem theorem33_eq16
+    {fStar f g x r : Program}
+    (hshort : IsShortestFeature runs fStar x)
+    (hr : runs g x r)
+    (hf : runs f r x)
+    (hcomp : CompressionCondition f r x) :
+    LogLe (PrefixInformation r f) (featureGap f fStar) (BitString.blen f) := by
+  rcases theorem33_eq16_additive hshort hr hf hcomp with ⟨c, d, h⟩
+  refine ⟨c, d, ?_⟩
+  unfold PrefixInformation featureGap at *
+  omega
+
 /-- Theorem 3.3 equation (16), now reduced only to the remaining formalism gap between shortest
 features and prefix descriptions of `x` given the residual `r`. The right-hand bridge
 `K(x | r) ≤ K(f | r) + O(log l(f))` is proved concretely from `runs f r x`. -/
@@ -431,6 +458,20 @@ theorem theorem33_eq17_of_conditionalBridge
           d * logPenalty (BitString.blen r) + e := by
   exact theorem33_eq17_additive_of_eq16
     (theorem33_eq16_of_conditionalBridge hshort hr hf hcomp hbridge)
+
+/-- Paper-facing form of Theorem 3.3 equation (17). -/
+theorem theorem33_eq17
+    {fStar f g x r : Program}
+    (hshort : IsShortestFeature runs fStar x)
+    (hr : runs g x r)
+    (hf : runs f r x)
+    (hcomp : CompressionCondition f r x) :
+    ∃ c d e : Nat,
+      JointInformation r f ≤
+        featureGap f fStar +
+          c * logPenalty (BitString.blen f) +
+          d * logPenalty (BitString.blen r) + e := by
+  exact theorem33_eq17_additive_of_eq16 (theorem33_eq16 hshort hr hf hcomp)
 
 /-- Theorem 3.3 equation (17), now reduced only to the remaining shortest-feature versus
 prefix-shortest gap already isolated by equation (16). -/

@@ -17,18 +17,18 @@ def packedInput (input payload : BitString) : BitString :=
 
 theorem evalPacked_partrec :
     Nat.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code n.unpair.1) n.unpair.2 := by
+      Code.eval (programToCode (BitString.ofNatExact n.unpair.1)) n.unpair.2 := by
   have hfst : Computable₂ (fun a b : ℕ => a) := Computable₂.mk Computable.fst
   have hsnd : Computable₂ (fun a b : ℕ => b) := Computable₂.mk Computable.snd
-  have hcode : Computable₂ (fun a b : ℕ => Denumerable.ofNat Code a) :=
-    (Computable.ofNat Code).comp₂ hfst
-  have hEval : Partrec₂ (fun a b : ℕ => Code.eval (Denumerable.ofNat Code a) b) :=
+  have hcode : Computable₂ (fun a b : ℕ => programToCode (BitString.ofNatExact a)) :=
+    (programToCode_computable.comp BitString.ofNatExact_computable).comp₂ hfst
+  have hEval : Partrec₂ (fun a b : ℕ => Code.eval (programToCode (BitString.ofNatExact a)) b) :=
     Code.eval_part.comp₂ hcode hsnd
   simpa [Nat.unpaired] using (Partrec₂.unpaired'.2 hEval)
 
 theorem exists_applyInterpreterCode :
     ∃ c : Code, ∀ n : Nat,
-      Code.eval c n = Code.eval (Denumerable.ofNat Code n.unpair.1) n.unpair.2 := by
+      Code.eval c n = Code.eval (programToCode (BitString.ofNatExact n.unpair.1)) n.unpair.2 := by
   obtain ⟨c, hc⟩ := Code.exists_code.1 evalPacked_partrec
   exact ⟨c, fun n => by simpa using congrFun hc n⟩
 
@@ -38,23 +38,23 @@ noncomputable def applyInterpreterCode : Code :=
 
 theorem eval_applyInterpreterCode (n : Nat) :
     Code.eval applyInterpreterCode n =
-      Code.eval (Denumerable.ofNat Code n.unpair.1) n.unpair.2 :=
+      Code.eval (programToCode (BitString.ofNatExact n.unpair.1)) n.unpair.2 :=
   Classical.choose_spec exists_applyInterpreterCode n
 
 theorem evalOuterApply_partrec :
     Nat.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code n.unpair.2) n.unpair.1 := by
+      Code.eval (programToCode (BitString.ofNatExact n.unpair.2)) n.unpair.1 := by
   have hfst : Computable₂ (fun a b : ℕ => a) := Computable₂.mk Computable.fst
   have hsnd : Computable₂ (fun a b : ℕ => b) := Computable₂.mk Computable.snd
-  have hcode : Computable₂ (fun a b : ℕ => Denumerable.ofNat Code b) :=
-    (Computable.ofNat Code).comp₂ hsnd
-  have hEval : Partrec₂ (fun a b : ℕ => Code.eval (Denumerable.ofNat Code b) a) :=
+  have hcode : Computable₂ (fun a b : ℕ => programToCode (BitString.ofNatExact b)) :=
+    (programToCode_computable.comp BitString.ofNatExact_computable).comp₂ hsnd
+  have hEval : Partrec₂ (fun a b : ℕ => Code.eval (programToCode (BitString.ofNatExact b)) a) :=
     Code.eval_part.comp₂ hcode hfst
   simpa [Nat.unpaired] using (Partrec₂.unpaired'.2 hEval)
 
 theorem exists_outerApplyInterpreterCode :
     ∃ c : Code, ∀ n : Nat,
-      Code.eval c n = Code.eval (Denumerable.ofNat Code n.unpair.2) n.unpair.1 := by
+      Code.eval c n = Code.eval (programToCode (BitString.ofNatExact n.unpair.2)) n.unpair.1 := by
   obtain ⟨c, hc⟩ := Code.exists_code.1 evalOuterApply_partrec
   exact ⟨c, fun n => by simpa using congrFun hc n⟩
 
@@ -64,23 +64,23 @@ noncomputable def outerApplyInterpreterCode : Code :=
 
 theorem eval_outerApplyInterpreterCode (n : Nat) :
     Code.eval outerApplyInterpreterCode n =
-      Code.eval (Denumerable.ofNat Code n.unpair.2) n.unpair.1 :=
+      Code.eval (programToCode (BitString.ofNatExact n.unpair.2)) n.unpair.1 :=
   Classical.choose_spec exists_outerApplyInterpreterCode n
 
 theorem evalEmptyPacked_partrec :
     Nat.Partrec fun n =>
-      Code.eval (Denumerable.ofNat Code n.unpair.2) 0 := by
+      Code.eval (programToCode (BitString.ofNatExact n.unpair.2)) 0 := by
   have hsnd : Computable₂ (fun a b : ℕ => b) := Computable₂.mk Computable.snd
-  have hcode : Computable₂ (fun a b : ℕ => Denumerable.ofNat Code b) :=
-    (Computable.ofNat Code).comp₂ hsnd
+  have hcode : Computable₂ (fun a b : ℕ => programToCode (BitString.ofNatExact b)) :=
+    (programToCode_computable.comp BitString.ofNatExact_computable).comp₂ hsnd
   have hzero : Computable₂ (fun _ _ : ℕ => 0) := Computable₂.mk (Computable.const 0)
-  have hEval : Partrec₂ (fun a b : ℕ => Code.eval (Denumerable.ofNat Code b) 0) :=
+  have hEval : Partrec₂ (fun a b : ℕ => Code.eval (programToCode (BitString.ofNatExact b)) 0) :=
     Code.eval_part.comp₂ hcode hzero
   simpa [Nat.unpaired] using (Partrec₂.unpaired'.2 hEval)
 
 theorem exists_emptyInterpreterCode :
     ∃ c : Code, ∀ n : Nat,
-      Code.eval c n = Code.eval (Denumerable.ofNat Code n.unpair.2) 0 := by
+      Code.eval c n = Code.eval (programToCode (BitString.ofNatExact n.unpair.2)) 0 := by
   obtain ⟨c, hc⟩ := Code.exists_code.1 evalEmptyPacked_partrec
   exact ⟨c, fun n => by simpa using congrFun hc n⟩
 
@@ -90,7 +90,7 @@ noncomputable def emptyInterpreterCode : Code :=
   Classical.choose exists_emptyInterpreterCode
 
 theorem eval_emptyInterpreterCode (n : Nat) :
-    Code.eval emptyInterpreterCode n = Code.eval (Denumerable.ofNat Code n.unpair.2) 0 :=
+    Code.eval emptyInterpreterCode n = Code.eval (programToCode (BitString.ofNatExact n.unpair.2)) 0 :=
   Classical.choose_spec exists_emptyInterpreterCode n
 
 /-- Prefix interpreter for ordinary plain descriptions. -/
@@ -178,6 +178,86 @@ theorem prefixConditionalComplexity_le_length {x input p : BitString}
     PrefixConditionalComplexity x input ≤ BitString.blen p := by
   apply Nat.sInf_le
   exact ⟨p, rfl, hp⟩
+
+private def replayPrefixDecoded (n : Nat) : Program × Program :=
+  decodePrefixDescription (BitString.ofNatExact n.unpair.2)
+
+private theorem replayPrefixDecoded_computable : Computable replayPrefixDecoded := by
+  exact decodePrefixDescription_computable.comp
+    (BitString.ofNatExact_computable.comp (Computable.snd.comp Computable.unpair))
+
+private def replayPrefixInterpreterNat (n : Nat) : Nat :=
+  BitString.toNatExact (replayPrefixDecoded n).1
+
+private def replayPrefixPayloadNat (n : Nat) : Nat :=
+  BitString.toNatExact (replayPrefixDecoded n).2
+
+private theorem replayPrefixInterpreterNat_computable : Computable replayPrefixInterpreterNat := by
+  exact BitString.toNatExact_computable.comp
+    (Computable.fst.comp replayPrefixDecoded_computable)
+
+private theorem replayPrefixPayloadNat_computable : Computable replayPrefixPayloadNat := by
+  exact BitString.toNatExact_computable.comp
+    (Computable.snd.comp replayPrefixDecoded_computable)
+
+private theorem evalReplayPrefix_partrec :
+    Nat.Partrec fun n =>
+      Code.eval (storedProgramCode (replayPrefixInterpreterNat n))
+        (Nat.pair n.unpair.1 (replayPrefixPayloadNat n)) := by
+  have hInput : Computable fun n : Nat => n.unpair.1 := by
+    exact Computable.fst.comp Computable.unpair
+  have hCode : Computable fun n => storedProgramCode (replayPrefixInterpreterNat n) := by
+    exact storedProgramCode_computable.comp replayPrefixInterpreterNat_computable
+  have hPacked : Computable fun n => Nat.pair n.unpair.1 (replayPrefixPayloadNat n) := by
+    exact (Primrec₂.natPair.to_comp).comp hInput replayPrefixPayloadNat_computable
+  exact Partrec.nat_iff.1 (Code.eval_part.comp hCode hPacked)
+
+theorem exists_replayPrefixInterpreterCode :
+    ∃ c : Code, ∀ n : Nat,
+      Code.eval c n =
+        Code.eval (storedProgramCode (replayPrefixInterpreterNat n))
+          (Nat.pair n.unpair.1 (replayPrefixPayloadNat n)) := by
+  obtain ⟨c, hc⟩ := Code.exists_code.1 evalReplayPrefix_partrec
+  exact ⟨c, fun n => by simpa using congrFun hc n⟩
+
+/-- Fixed plain interpreter that replays a stored prefix description under the current plain
+program semantics. -/
+noncomputable def replayPrefixInterpreterCode : Code :=
+  Classical.choose exists_replayPrefixInterpreterCode
+
+theorem eval_replayPrefixInterpreterCode (n : Nat) :
+    Code.eval replayPrefixInterpreterCode n =
+      Code.eval (storedProgramCode (replayPrefixInterpreterNat n))
+        (Nat.pair n.unpair.1 (replayPrefixPayloadNat n)) :=
+  Classical.choose_spec exists_replayPrefixInterpreterCode n
+
+/-- Direct plain interpreter used to replay arbitrary stored prefix descriptions. -/
+noncomputable def replayPrefixInterpreter : Program :=
+  codeToProgram replayPrefixInterpreterCode
+
+theorem runs_replayPrefixInterpreter_of_prefixRuns {q input output : Program}
+    (hq : PrefixRuns q input output) :
+    runs replayPrefixInterpreter (packedInput input q) output := by
+  rcases hq with ⟨interpreter, payload, hqEq, hrun⟩
+  rw [replayPrefixInterpreter, runs_codeToProgram_iff, toNatExact_packedInput, hqEq]
+  simpa [eval_replayPrefixInterpreterCode, replayPrefixInterpreterNat, replayPrefixPayloadNat,
+    replayPrefixDecoded, decodePrefixDescription, runs, toNatExact_packedInput]
+    using hrun
+
+theorem prefixRuns_replayPrefixInterpreter_of_prefixRuns {q input output : Program}
+    (hq : PrefixRuns q input output) :
+    PrefixRuns (BitString.pair replayPrefixInterpreter (BitString.e2 q)) input output := by
+  refine ⟨replayPrefixInterpreter, q, rfl, ?_⟩
+  exact runs_replayPrefixInterpreter_of_prefixRuns hq
+
+theorem runs_prefixReplayPackedProgram_codeToProgram_iff
+    (c : Code) (payload input output : Program) :
+    runs (prefixReplayPackedProgram (BitString.pair (codeToProgram c) (BitString.e2 payload)))
+      input output ↔
+      runs (codeToProgram c) (packedInput input payload) output := by
+  rw [runs_iff, programToCode_prefixReplayPackedProgram, runs_codeToProgram_iff]
+  simp [eval_prefixReplayInterpreterCode, prefixReplayStoredInterpreterNat,
+    prefixReplayStoredResidualNat, decodePrefixDescription, codeToProgram, toNatExact_packedInput]
 
 theorem prefixRuns_applyInterpreter_of_runs {f r x : Program} (hf : runs f r x) :
     PrefixRuns (BitString.pair applyInterpreter (BitString.e2 r)) f x := by
