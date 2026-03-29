@@ -240,6 +240,17 @@ def IsCompressionStep (x f r : Program) : Prop :=
     CompressionCondition f r x ∧
     NoSuperfluousPair r f x
 
+/-- One compression step in the paper-form Theorem 3.6 packaging:
+`f*` is a shortest feature of `x`, `f'^*` is a shortest corresponding descriptive map, and
+`r = f'^*(x)` is the residual description used in the paper statement. -/
+def IsPaperCompressionStep (x f r : Program) : Prop :=
+  ∃ g : Program,
+    IsShortestFeature runs f x ∧
+      IsShortestDescriptiveMap runs f g x ∧
+      runs g x r ∧
+      runs f r x ∧
+      CompressionCondition f r x
+
 private theorem residual_length_lt_of_compressionStep {x f r : Program}
     (hstep : IsCompressionStep x f r) :
     BitString.blen r < BitString.blen x := by
@@ -251,6 +262,13 @@ private theorem residual_length_lt_of_prefixCompressionStep {x f r : Program}
     (hstep : IsPrefixCompressionStep x f r) :
     BitString.blen r < BitString.blen x := by
   rcases hstep with ⟨_, _, hcomp, _, _⟩
+  unfold CompressionCondition at hcomp
+  omega
+
+private theorem residual_length_lt_of_paperCompressionStep {x f r : Program}
+    (hstep : IsPaperCompressionStep x f r) :
+    BitString.blen r < BitString.blen x := by
+  rcases hstep with ⟨_, _, _, _, _, hcomp⟩
   unfold CompressionCondition at hcomp
   omega
 
@@ -301,6 +319,27 @@ theorem stepLogEq_of_compressionStep {x f r : Program}
         (BitString.blen x) := by
     simpa [Nat.add_comm, Nat.add_left_comm, Nat.add_assoc] using
       (logEq_add_left (k := PrefixComplexity r) (theorem31 hshort))
+  exact stepLogEq_of_logEq (hstepEq.trans hfeatureEq)
+
+/-- A single paper-facing compression step already gives the one-step form of Theorem 3.6. -/
+theorem stepLogEq_of_paperCompressionStep {x f r : Program}
+    (hstep : IsPaperCompressionStep x f r) :
+    StepLogEq (PrefixComplexity x)
+      (BitString.blen f + PrefixComplexity r)
+      1
+      (BitString.blen x) := by
+  rcases hstep with ⟨g, hshortF, hshortG, hr, hf, hcomp⟩
+  have hstepEq :
+      LogEq (PrefixComplexity x)
+        (PrefixComplexity f + PrefixComplexity r)
+        (BitString.blen x) :=
+    theorem34_eq28 hshortF hshortG hr hf hcomp
+  have hfeatureEq :
+      LogEq (PrefixComplexity f + PrefixComplexity r)
+        (BitString.blen f + PrefixComplexity r)
+        (BitString.blen x) := by
+    simpa [Nat.add_comm, Nat.add_left_comm, Nat.add_assoc] using
+      (logEq_add_left (k := PrefixComplexity r) (theorem31 hshortF))
   exact stepLogEq_of_logEq (hstepEq.trans hfeatureEq)
 
 /-- Prefix-form Theorem 3.6: iterating the current single-step decomposition yields a total
@@ -354,6 +393,17 @@ inductive IsIncrementalCompression : Program → List Program → Program → Pr
       (hrest : IsIncrementalCompression r fs rs) :
       IsIncrementalCompression x (f :: fs) rs
 
+/-- Paper-form inductive model of incremental compression from Theorem 3.6:
+`r₀ ≡ x`, each `fᵢ*` is a shortest feature of `rᵢ₋₁`, and `rᵢ` is a corresponding residual
+description produced by the corresponding shortest descriptive map `fᵢ'^*`. -/
+inductive IsIncrementalPaperCompression : Program → List Program → Program → Prop
+  | nil (x : Program) :
+      IsIncrementalPaperCompression x [] x
+  | cons {x f r rs : Program} {fs : List Program}
+      (hstep : IsPaperCompressionStep x f r)
+      (hrest : IsIncrementalPaperCompression r fs rs) :
+      IsIncrementalPaperCompression x (f :: fs) rs
+
 /-- Exact-length Theorem 3.6:
 iterating shortest-feature compression with no-superfluous residual witnesses yields a total
 description length equal to `∑ l(fᵢ*) + K(rₛ)` up to `s` logarithmic overhead terms. -/
@@ -379,6 +429,46 @@ theorem theorem36 {x rs : Program} {fs : List Program}
             fs.length
             (BitString.blen x) := by
         exact stepLogEq_of_scale_le ih (residual_length_lt_of_compressionStep hstep).le
+      have hrestAdd :
+          StepLogEq (BitString.blen f + PrefixComplexity r)
+            (BitString.blen f + (featureLengthSum fs + PrefixComplexity rs))
+            fs.length
+            (BitString.blen x) := by
+        exact stepLogEq_add_left hrestEq
+      have htotal :
+          StepLogEq (PrefixComplexity x)
+            (BitString.blen f + (featureLengthSum fs + PrefixComplexity rs))
+            (1 + fs.length)
+            (BitString.blen x) := by
+        exact stepLogEq_trans hstepEq hrestAdd
+      simpa [featureLengthSum, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
+        htotal
+
+/-- Theorem 3.6 in paper form:
+iterating shortest features with corresponding residual descriptions yields a total description
+length `∑ l(fᵢ*) + K(rₛ)` up to `s` logarithmic overhead terms. -/
+theorem theorem36_paper {x rs : Program} {fs : List Program}
+    (hchain : IsIncrementalPaperCompression x fs rs) :
+    StepLogEq (PrefixComplexity x)
+      (featureLengthSum fs + PrefixComplexity rs)
+      fs.length
+      (BitString.blen x) := by
+  induction hchain with
+  | nil x =>
+      simpa using stepLogEq_refl (PrefixComplexity x) (BitString.blen x)
+  | @cons x f r rs fs hstep hrest ih =>
+      have hstepEq :
+          StepLogEq (PrefixComplexity x)
+            (BitString.blen f + PrefixComplexity r)
+            1
+            (BitString.blen x) :=
+        stepLogEq_of_paperCompressionStep hstep
+      have hrestEq :
+          StepLogEq (PrefixComplexity r)
+            (featureLengthSum fs + PrefixComplexity rs)
+            fs.length
+            (BitString.blen x) := by
+        exact stepLogEq_of_scale_le ih (residual_length_lt_of_paperCompressionStep hstep).le
       have hrestAdd :
           StepLogEq (BitString.blen f + PrefixComplexity r)
             (BitString.blen f + (featureLengthSum fs + PrefixComplexity rs))

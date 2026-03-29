@@ -402,6 +402,101 @@ theorem conditionalComposeInterpreter_isConditionalComposeInterpreter :
     jointUpperSecondCodeNat, jointUpperSecondResidualNat, jointUpperDecoded, JointUpperPayload,
     hf', hg']
 
+/-- Specification of a fixed interpreter that, relative to an outer conditioning input `input`,
+runs two stored prefix descriptions `(f, s)` and `(g, r)` against that same input and returns the
+packed pair of their outputs. -/
+def IsConditionalJointUpperInterpreter (u : Program) : Prop :=
+  ∀ f s g r input x y : Program,
+    runs f (packedInput input s) x →
+      runs g (packedInput input r) y →
+        runs u (packedInput input (JointUpperPayload s f r g)) (packedInput x y)
+
+private theorem evalConditionalJointUpper_partrec :
+    Nat.Partrec fun n =>
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
+          (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun xNat =>
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
+            (Nat.pair n.unpair.1 (jointUpperSecondResidualNat n)) >>= fun yNat =>
+          Part.some (Nat.pair xNat yNat) := by
+  have hOuter : Computable fun n : Nat => n.unpair.1 := by
+    exact Computable.fst.comp Computable.unpair
+  have hFirstCode : Computable fun n => storedProgramCode (jointUpperFirstCodeNat n) := by
+    exact storedProgramCode_computable.comp jointUpperFirstCodeNat_computable
+  have hFirstInput : Computable fun n => Nat.pair n.unpair.1 (jointUpperResidualNat n) := by
+    exact (Primrec₂.natPair.to_comp).comp hOuter jointUpperResidualNat_computable
+  have hEval₁ : _root_.Partrec fun n =>
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
+        (Nat.pair n.unpair.1 (jointUpperResidualNat n)) := by
+    exact Code.eval_part.comp hFirstCode hFirstInput
+  have hSecondCode : Computable fun p : Nat × Nat =>
+      storedProgramCode (jointUpperSecondCodeNat p.1) := by
+    exact storedProgramCode_computable.comp (jointUpperSecondCodeNat_computable.comp Computable.fst)
+  have hSecondInput : Computable fun p : Nat × Nat =>
+      Nat.pair p.1.unpair.1 (jointUpperSecondResidualNat p.1) := by
+    exact (Primrec₂.natPair.to_comp).comp
+      (Computable.fst.comp (Computable.unpair.comp Computable.fst))
+      (jointUpperSecondResidualNat_computable.comp Computable.fst)
+  have hEval₂ : _root_.Partrec fun p : Nat × Nat =>
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat p.1))
+        (Nat.pair p.1.unpair.1 (jointUpperSecondResidualNat p.1)) := by
+    exact Code.eval_part.comp hSecondCode hSecondInput
+  have hPack : _root_.Partrec₂ fun n xNat =>
+      Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
+          (Nat.pair n.unpair.1 (jointUpperSecondResidualNat n)) >>= fun yNat =>
+        Part.some (Nat.pair xNat yNat) := by
+    have hOut : Computable₂ fun (p : Nat × Nat) (yNat : Nat) => Nat.pair p.2 yNat := by
+      exact (Primrec₂.natPair.to_comp).comp (Computable.snd.comp Computable.fst) Computable.snd
+    simpa using (hEval₂.bind hOut.partrec₂).to₂
+  exact _root_.Partrec.nat_iff.1 (hEval₁.bind hPack)
+
+theorem exists_conditionalJointUpperInterpreterCode :
+    ∃ c : Code, ∀ n : Nat,
+      Code.eval c n =
+        Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
+            (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun xNat =>
+          Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
+              (Nat.pair n.unpair.1 (jointUpperSecondResidualNat n)) >>= fun yNat =>
+            Part.some (Nat.pair xNat yNat) := by
+  obtain ⟨c, hc⟩ := Code.exists_code.1 evalConditionalJointUpper_partrec
+  exact ⟨c, fun n => by simpa using congrFun hc n⟩
+
+/-- Concrete interpreter that packages two stored conditional descriptions with a common outer
+input into a prefix description of the pair of their outputs. -/
+noncomputable def conditionalJointUpperInterpreterCode : Code :=
+  Classical.choose exists_conditionalJointUpperInterpreterCode
+
+theorem eval_conditionalJointUpperInterpreterCode (n : Nat) :
+    Code.eval conditionalJointUpperInterpreterCode n =
+      Code.eval (storedProgramCode (jointUpperFirstCodeNat n))
+          (Nat.pair n.unpair.1 (jointUpperResidualNat n)) >>= fun xNat =>
+        Code.eval (storedProgramCode (jointUpperSecondCodeNat n))
+            (Nat.pair n.unpair.1 (jointUpperSecondResidualNat n)) >>= fun yNat =>
+          Part.some (Nat.pair xNat yNat) :=
+  Classical.choose_spec exists_conditionalJointUpperInterpreterCode n
+
+/-- Concrete interpreter witnessing conditional joint upper bounds under a shared outer input. -/
+noncomputable def conditionalJointUpperInterpreter : Program :=
+  codeToProgram conditionalJointUpperInterpreterCode
+
+theorem conditionalJointUpperInterpreter_isConditionalJointUpperInterpreter :
+    IsConditionalJointUpperInterpreter conditionalJointUpperInterpreter := by
+  intro f s g r input x y hf hg
+  have hf' :
+      Code.eval (programToCode f)
+          (Nat.pair (BitString.toNatExact input) (BitString.toNatExact s)) =
+        Part.some (BitString.toNatExact x) := by
+    simpa [runs, toNatExact_packedInput] using hf
+  have hg' :
+      Code.eval (programToCode g)
+          (Nat.pair (BitString.toNatExact input) (BitString.toNatExact r)) =
+        Part.some (BitString.toNatExact y) := by
+    simpa [runs, toNatExact_packedInput] using hg
+  rw [conditionalJointUpperInterpreter, runs_codeToProgram_iff, toNatExact_packedInput,
+    toNatExact_packedInput]
+  simp [eval_conditionalJointUpperInterpreterCode, jointUpperFirstCodeNat, jointUpperResidualNat,
+    jointUpperSecondCodeNat, jointUpperSecondResidualNat, jointUpperDecoded, JointUpperPayload,
+    hf', hg']
+
 /-- Specification of a fixed interpreter that ignores the outer conditioning input and executes a
 stored exact pair payload `(s, f)` as the prefix description `⟨f, e2 s⟩` on empty input. -/
 def IsIgnoreConditionPrefixInterpreter (u : Program) : Prop :=
@@ -1314,6 +1409,62 @@ theorem jointUpperChainRuleAt_of_interpreter_of_scale_logLe {u x y : Program} {n
     (hscale : LogLe (PrefixComplexity x + PrefixConditionalComplexity y x) n n) :
     JointUpperChainRuleAt n x y := by
   exact logLe_of_scale_logLe (jointUpperChainRuleAt_complexityScale_of_interpreter hu) hscale
+
+/-- Conditional upper-chain rule with a shared outer input:
+two shortest prefix descriptions of `x` and `y` relative to the same `input` can be packaged into
+a prefix description of `⟨x, y⟩` with only logarithmic overhead. -/
+theorem prefixConditionalComplexity_logLe_of_conditionalJointUpper {u input x y : Program}
+    (hu : IsConditionalJointUpperInterpreter u) :
+    LogLe (PrefixConditionalComplexity (packedInput x y) input)
+      (PrefixConditionalComplexity x input + PrefixConditionalComplexity y input)
+      (PrefixConditionalComplexity x input + PrefixConditionalComplexity y input) := by
+  obtain ⟨p₁, hp₁Len, hp₁Runs⟩ := exists_program_forPrefixConditionalComplexity x input
+  rcases hp₁Runs with ⟨f, s, hp₁Eq, hf⟩
+  obtain ⟨p₂, hp₂Len, hp₂Runs⟩ := exists_program_forPrefixConditionalComplexity y input
+  rcases hp₂Runs with ⟨g, r, hp₂Eq, hg⟩
+  let n : Nat := PrefixConditionalComplexity x input + PrefixConditionalComplexity y input
+  let payload : Program := JointUpperPayload s f r g
+  let p : Program := BitString.pair u (BitString.e2 payload)
+  have hpRuns : PrefixRuns p input (packedInput x y) := by
+    refine ⟨u, payload, rfl, ?_⟩
+    exact hu f s g r input x y hf hg
+  have hpair : PrefixConditionalComplexity (packedInput x y) input ≤ BitString.blen p := by
+    exact prefixConditionalComplexity_le_length hpRuns
+  have hpayload :
+      BitString.blen payload ≤
+        PrefixConditionalComplexity x input + PrefixConditionalComplexity y input +
+          (2 * BitString.blen (BitString.ofNat (PrefixConditionalComplexity x input)) + 1) := by
+    have h := BitString.blen_exactQuadPayload_le_twoPrefixPrograms s f r g
+    rw [← hp₁Eq, ← hp₂Eq, hp₁Len, hp₂Len] at h
+    simpa [payload, JointUpperPayload] using h
+  have hx :
+      PrefixConditionalComplexity x input ≤ n := by
+    exact Nat.le_add_right _ _
+  have hlogx :
+      BitString.blen (BitString.ofNat (PrefixConditionalComplexity x input)) ≤
+        logPenalty n + 1 := by
+    have hsize := blen_ofNat_le_logPenalty_succ (PrefixConditionalComplexity x input)
+    have hmono := logPenalty_mono hx
+    omega
+  have hpayloadScale :
+      BitString.blen payload ≤ 4 * n + 1 := by
+    have hsize := BitString.blen_ofNat_le_self (PrefixConditionalComplexity x input)
+    omega
+  have hlogPayload :
+      BitString.blen (BitString.ofNat (BitString.blen payload)) ≤ logPenalty n + 3 := by
+    exact blen_ofNat_le_logPenalty_add_three_of_le_four_mul_add_three
+      (by omega : BitString.blen payload ≤ 4 * n + 3)
+  have hpair' :
+      PrefixConditionalComplexity (packedInput x y) input ≤
+        1 + (1 + (2 * BitString.blen u +
+          (BitString.blen payload +
+            2 * BitString.blen (BitString.ofNat (BitString.blen payload))))) := by
+    simpa [p, BitString.blen_pair, BitString.blen_e2, Nat.add_assoc, Nat.add_comm,
+      Nat.add_left_comm] using hpair
+  refine ⟨4, jointUpperInterpreterPrefixOverhead u, ?_⟩
+  unfold jointUpperInterpreterPrefixOverhead
+  dsimp [n] at hpayload hx hlogx hpayloadScale hlogPayload hpair' ⊢
+  omega
 
 /-- Conditional transitivity of prefix complexity: a shortest prefix description of `z` given
 `input` can be composed with one of `y` given `z`, with only logarithmic overhead. -/
