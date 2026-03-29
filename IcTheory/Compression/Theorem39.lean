@@ -712,6 +712,13 @@ noncomputable def schemeDescriptionInterpreter : Program :=
 noncomputable def schemeDescriptionInterpreterOverhead : Nat :=
   2 * BitString.blen schemeDescriptionInterpreter + 2
 
+/-- Additive plain-program overhead for reconstructing `x` from a stored `schemeDescription`
+payload under the active machine. The payload is first replayed verbatim, then fed to the fixed
+Section 3.5 interpreter via the postcompose branch. -/
+noncomputable def schemeDescriptionPlainOverhead : Nat :=
+  BitString.blen schemeDescriptionInterpreter +
+    (2 * BitString.blen (BitString.ofNat (BitString.blen schemeDescriptionInterpreter)) + 9)
+
 theorem evalSchemeDescriptionPrefixPacked_partrec :
     Nat.Partrec fun n =>
       Code.eval storedSchemeInterpreterCode n.unpair.2 := by
@@ -919,6 +926,51 @@ theorem prefixComplexity_le_schemeDescriptionLength
   unfold PrefixComplexity schemeDescriptionPrefixOverhead at *
   omega
 
+theorem complexity_le_schemeDescriptionLength
+    {ds x : Program}
+    (hruns : runs schemeDescriptionInterpreter ds x) :
+    Complexity x ≤ BitString.blen ds + schemeDescriptionPlainOverhead := by
+  have hstored : runs (storedValuePackedProgram ds) [] ds := by
+    simpa using (runs_storedValuePackedProgram_iff ds ([] : Program) ds).2 rfl
+  have hpost :
+      runs
+        (postcomposePackedProgram
+          schemeDescriptionInterpreter
+          (storedValuePackedProgram ds))
+        [] x := by
+    exact runs_postcomposePackedProgram_of_runs hstored hruns
+  have hlen :
+      Complexity x ≤
+        BitString.blen
+          (postcomposePackedProgram
+            schemeDescriptionInterpreter
+            (storedValuePackedProgram ds)) := by
+    exact complexity_le_length hpost
+  have hcodec :
+      BitString.blen
+          (BitString.ofNatExact (BitString.blen schemeDescriptionInterpreter)) ≤
+        BitString.blen (BitString.ofNat (BitString.blen schemeDescriptionInterpreter)) := by
+    exact BitString.blen_ofNatExact_le_ofNat (BitString.blen schemeDescriptionInterpreter)
+  calc
+    Complexity x ≤
+        BitString.blen
+          (postcomposePackedProgram
+            schemeDescriptionInterpreter
+            (storedValuePackedProgram ds)) := hlen
+    _ ≤ BitString.blen ds + schemeDescriptionPlainOverhead := by
+      rw [blen_postcomposePackedProgram, blen_storedValuePackedProgram, schemeDescriptionPlainOverhead]
+      omega
+
+/-- The concrete Section 3.5 description object itself yields a plain-program witness for `x`,
+with only constant additive overhead beyond `|D_s|`. -/
+theorem complexity_le_schemeDescription_of_incrementalBCompressionScheme
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    Complexity x ≤
+      BitString.blen (schemeDescription rs fs) + schemeDescriptionPlainOverhead := by
+  exact complexity_le_schemeDescriptionLength
+    (schemeDescriptionInterpreter_runs_of_incrementalBCompressionScheme hchain)
+
 /-- The concrete Section 3.5 description object itself yields a prefix witness for `x`, with only
 the usual logarithmic self-delimiting overhead beyond `|D_s|`. -/
 theorem prefixComplexity_le_schemeDescription_of_incrementalBCompressionScheme
@@ -984,6 +1036,15 @@ theorem theorem39_eq48_lower_current
       blen_ofNat_le_logPenalty_succ (BitString.blen (schemeDescription rs fs))
   refine ⟨2, schemeDescriptionPrefixOverhead + 2, ?_⟩
   omega
+
+/-- Exact lower side of equation (48): the concrete description object `D_s` gives an ordinary
+program for `x` up to fixed additive overhead. -/
+theorem theorem39_eq48_lower
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    Complexity x ≤
+      BitString.blen (schemeDescription rs fs) + schemeDescriptionPlainOverhead := by
+  exact complexity_le_schemeDescription_of_incrementalBCompressionScheme hchain
 
 /-- Explicit upper bound on the concrete description object `D_s` at the scheme scale. This is
 the current formalization-level upper side of equation (48). -/
@@ -1098,17 +1159,15 @@ theorem theorem39_eq48_upper
       (hchain := hchain))
 
 /-- Current-form Theorem 3.9: the concrete description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`
-now has an exact hypothesis-free upper side for equation (48), a current-form logarithmic lower
-side, the formalization-level version of equation (51), uniformly bounded selected features and
-descriptive maps, a logarithmic step count, and a terminal residual that is either small or no
-longer `b`-compressible. -/
+now has exact hypothesis-free lower and upper sides for equation (48), the formalization-level
+version of equation (51), uniformly bounded selected features and descriptive maps, a logarithmic
+step count, and a terminal residual that is either small or no longer `b`-compressible. -/
 theorem theorem39
     {b : Nat} {x rs : Program} {fs gs : List Program}
     (hb : 1 < b)
     (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
-    LogLe (PrefixComplexity x)
-      (BitString.blen (schemeDescription rs fs))
-      (BitString.blen (schemeDescription rs fs)) ∧
+    Complexity x ≤
+      BitString.blen (schemeDescription rs fs) + schemeDescriptionPlainOverhead ∧
       (let k := shortFeatureResidualMapBound (bCompressibleFeatureBound b)
        let c := postcomposeComplexityOverhead k
        let steps := Nat.log b (BitString.blen x) + 1
@@ -1131,7 +1190,7 @@ theorem theorem39
       fs.length = gs.length ∧
       fs.length ≤ Nat.log b (BitString.blen x) + 1 ∧
       (BitString.blen rs ≤ bCompressionCutoff b ∨ ¬ BCompressible b rs) := by
-  refine ⟨theorem39_eq48_lower_current hchain,
+  refine ⟨theorem39_eq48_lower hchain,
     theorem39_eq48_upper hb hchain,
     theorem39_eq51 hb hchain,
     incrementalBCompressionScheme_features_bounded hb hchain,
