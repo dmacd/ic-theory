@@ -41,11 +41,58 @@ The default library target builds with `lake build`.
   corollaries, and the Section 5 randomness/test bridge
 - `IcTheory.Sanity`: consistency checks and small integration lemmas
 
+## Stronger Results
+
+Besides the paper-form endpoints, the development keeps several stronger results that expose the
+actual machine-level objects and constants hidden by the paper's asymptotic notation.
+
+- `Compression.theorem39` proves exact lower and upper bounds for the concrete description object
+  `D_s = ⟨s, r_s, f_s, ..., f_1⟩`, together with exact forms of the packaged eqs. (49)-(51). This
+  is useful because the real bitstring, its decoder, and all overhead terms are explicit.
+- `Compression.theorem41_current` retains explicit weighted-sum and closed-form search-time bounds
+  stronger than the paper's asymptotic Theorem 4.1. This is useful because later proofs can reuse
+  concrete arithmetic estimates instead of unpacking `O(i)` terms again.
+- `Compression.theorem52_decoder` is a constructive strengthening of Theorem 5.2: it extracts a
+  feature `f` and threshold `m` with `|f| = m - 1` plus an explicit decoder for the `m`-th
+  randomness level set. This is useful because the randomness-to-feature map is executable and not
+  merely existential.
+
 ## Build
 
 ```bash
 lake build
 ```
+
+## Auditing The Formalization
+
+If you know the IC paper but not Lean, the fastest audit path is:
+
+```bash
+bash scripts/audit_claims.sh
+```
+
+That helper does four things:
+
+1. runs `lake build`, which asks the Lean kernel to check every imported proof term in the library
+2. scans `IcTheory/` for `sorry` and `admit`, which are Lean's unfinished-proof markers
+3. scans `IcTheory/` for project-local `axiom`, `constant`, `opaque`, and `unsafe` declarations
+   that would deserve extra scrutiny
+4. runs `lake env lean IcTheory/Audit.lean`, which prints the statement actually proved
+   (`#check`) and the kernel-reported axioms used by each main theorem (`#print axioms`)
+
+How to interpret the results:
+
+- If `lake build` succeeds, the imported theorems are fully checked by Lean's kernel.
+- If the hole scan is empty, there are no unfinished proofs in `IcTheory/`.
+- If the project-axiom scan is empty, the development is not introducing its own unproved logical
+  assumptions through top-level declarations.
+- `IcTheory/Audit.lean` shows the exact theorem types that Lean knows about, so you can compare
+  them against the paper and `docs/theorem-map.md`.
+- For the main theorems in this repo, `#print axioms` should report only
+  `[propext, Classical.choice, Quot.sound]`, which are the standard classical axioms typically
+  used by Mathlib developments. Project-local axiom names would be a red flag.
+- Local commands such as `set_option maxHeartbeats ... in` only raise Lean's elaboration budget for
+  expensive proofs. They do not add assumptions or weaken soundness.
 
 ## Project Notes
 

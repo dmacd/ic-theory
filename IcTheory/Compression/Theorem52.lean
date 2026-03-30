@@ -863,6 +863,8 @@ private theorem randomnessLevelFeatureBaseBound (approx : Program) :
   simp [randomnessLevelFeaturePad, randomnessLevelFeaturePadLen]
 
 set_option maxHeartbeats 5000000 in
+-- This is a large exact-length normalization over nested bitlength formulas and arithmetic
+-- rewrites. A local heartbeat bump keeps elaboration deterministic without changing the theorem.
 private theorem chosenRandomnessLevelFeature_length (approx : Program) :
     BitString.blen (chosenRandomnessLevelFeature approx) =
       randomnessLevelFeatureThreshold approx - 1 := by
@@ -954,6 +956,8 @@ private theorem chosenRandomnessLevelFeature_isDecoder
       (pad := randomnessLevelFeaturePad approx)
 
 set_option maxHeartbeats 5000000 in
+-- This wrapper packages the explicit decoder witness built above. Lean still has to elaborate the
+-- full witness term, so we keep the larger heartbeat budget local to this theorem.
 private theorem exists_randomnessLevelFeatureDecoder
     {δ : Program → Nat} {φ : Nat → Program → Nat} {approx : Program}
     (hδ : IsUniformMartinLofTest δ)
@@ -967,15 +971,25 @@ private theorem exists_randomnessLevelFeatureDecoder
     randomnessLevelFeatureThreshold_pos approx,
     chosenRandomnessLevelFeature_isDecoder hδ happrox hmono hlim⟩
 
+/-- Stronger constructive form of Theorem 5.2: from a uniform Martin-Lof test we extract an
+explicit feature `f` of exact length `m - 1` together with a decoder for the `m`-th randomness
+level set. The paper's additional unboundedness hypothesis is only needed to ensure that some
+string actually lies above the resulting threshold. -/
+theorem theorem52_decoder {δ : Program → Nat}
+    (hδ : IsUniformMartinLofTest δ) :
+    ∃ f : Program, ∃ m : Nat,
+      BitString.blen f = m - 1 ∧ 0 < m ∧ IsRandomnessLevelIndexDecoder δ m f := by
+  rcases hδ.lowerSemicomputable with ⟨φ, hφcomp, hmono, hlim⟩
+  obtain ⟨approx, happrox⟩ := exists_randomnessApproximationProgram hφcomp
+  exact exists_randomnessLevelFeatureDecoder hδ happrox hmono hlim
+
 /-- Paper-form Theorem 5.2. From a uniform unbounded Martin-Löf test we obtain a single feature
 that is a feature of every string whose deficiency exceeds the feature length. -/
 theorem theorem52 {δ : Program → Nat}
     (hδ : IsUniformMartinLofTest δ)
     (hunbounded : IsUnboundedMartinLofTest δ) :
     ∃ f : Program, ∀ x : Program, BitString.blen f < δ x → IsFeature runs f x := by
-  rcases hδ.lowerSemicomputable with ⟨φ, hφcomp, hmono, hlim⟩
-  obtain ⟨approx, happrox⟩ := exists_randomnessApproximationProgram hφcomp
-  rcases exists_randomnessLevelFeatureDecoder hδ happrox hmono hlim with
+  rcases theorem52_decoder hδ with
     ⟨f, m, hfLen, hmPos, hdecoder⟩
   have _hnonvacuous : ∃ x : Program, BitString.blen f < δ x := by
     simpa [hfLen] using hunbounded (BitString.blen f)
