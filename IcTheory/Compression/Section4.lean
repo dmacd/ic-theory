@@ -10,17 +10,50 @@ open Nat.Partrec
 
 noncomputable section
 
-/-- Section 4 autoencoder payload `a = g' f`, stored in a machine-readable exact encoding. -/
+/-- Section 4 autoencoder payload `a = g' f`, stored as the paper-style self-delimiting
+codeword `⟨g, e2(f)⟩`. -/
 def autoencoderPayload (g f : Program) : Program :=
-  BitString.exactPairPayload g f
+  BitString.pair g (BitString.e2 f)
 
 /-- Decode an autoencoder payload into its descriptive map and feature. -/
 def decodeAutoencoderPayload (a : Program) : Program × Program :=
-  BitString.decodeExactPairPayload a
+  decodePrefixDescription a
 
 @[simp] theorem decodeAutoencoderPayload_autoencoderPayload (g f : Program) :
     decodeAutoencoderPayload (autoencoderPayload g f) = (g, f) := by
   simp [decodeAutoencoderPayload, autoencoderPayload]
+
+@[simp] theorem autoencoderPayload_eq_iff
+    {g₁ f₁ g₂ f₂ : Program} :
+    autoencoderPayload g₁ f₁ = autoencoderPayload g₂ f₂ ↔
+      g₁ = g₂ ∧ f₁ = f₂ := by
+  constructor
+  · intro h
+    rcases BitString.pair_eq_pair_iff.mp h with ⟨hg, hf⟩
+    exact ⟨hg, BitString.e2_injective hf⟩
+  · rintro ⟨rfl, rfl⟩
+    rfl
+
+/-- Recognize the valid self-delimiting Section 4 autoencoder codewords. -/
+def IsAutoencoderPayload (a : Program) : Prop :=
+  autoencoderPayload (decodeAutoencoderPayload a).1 (decodeAutoencoderPayload a).2 = a
+
+instance instDecidableIsAutoencoderPayload (a : Program) :
+    Decidable (IsAutoencoderPayload a) := by
+  unfold IsAutoencoderPayload
+  infer_instance
+
+@[simp] theorem isAutoencoderPayload_autoencoderPayload (g f : Program) :
+    IsAutoencoderPayload (autoencoderPayload g f) := by
+  simp [IsAutoencoderPayload]
+
+theorem isAutoencoderPayload_iff_exists {a : Program} :
+    IsAutoencoderPayload a ↔ ∃ g f, autoencoderPayload g f = a := by
+  constructor
+  · intro h
+    exact ⟨(decodeAutoencoderPayload a).1, (decodeAutoencoderPayload a).2, h⟩
+  · rintro ⟨g, f, rfl⟩
+    exact isAutoencoderPayload_autoencoderPayload g f
 
 /-- Section 4 machine output `⟨y, r, f⟩`, encoded through the exact bitstring bridge. -/
 def autoencoderOutput (y r f : Program) : Program :=
@@ -52,10 +85,13 @@ theorem autoencoderStep_isFeature {x g f r : Program}
   exact ⟨g, autoencoderStep_isDescriptiveMap h⟩
 
 private def autoencoderDecoded (n : Nat) : Program × Program :=
-  BitString.decodeExactPairPayload (BitString.ofNatExact n.unpair.2)
+  decodeAutoencoderPayload (BitString.ofNatExact n.unpair.2)
+
+private theorem decodeAutoencoderPayload_computable : Computable decodeAutoencoderPayload :=
+  decodePrefixDescription_computable
 
 private theorem autoencoderDecoded_computable : Computable autoencoderDecoded := by
-  exact BitString.decodeExactPairPayload_computable.comp
+  exact decodeAutoencoderPayload_computable.comp
     (BitString.ofNatExact_computable.comp (Computable.snd.comp Computable.unpair))
 
 private def autoencoderMapCodeNat (n : Nat) : Nat :=
@@ -136,18 +172,6 @@ noncomputable def autoencoderInterpreter : Program :=
     runs autoencoderInterpreter (packedInput x (autoencoderPayload g f))
       (autoencoderOutput y r f') ↔
         f' = f ∧ runs g x r ∧ runs f r y := by
-  have hg :
-      BitString.toNatExact
-        (BitString.decodeExactPairPayload
-          (BitString.ofNatExact (BitString.toNatExact (autoencoderPayload g f)))).1 =
-        BitString.toNatExact g := by
-    simp [autoencoderPayload]
-  have hfcode :
-      BitString.toNatExact
-        (BitString.decodeExactPairPayload
-          (BitString.ofNatExact (BitString.toNatExact (autoencoderPayload g f)))).2 =
-        BitString.toNatExact f := by
-    simp [autoencoderPayload]
   rw [autoencoderInterpreter, runs_codeToProgram_iff, toNatExact_packedInput]
   constructor
   · intro h
@@ -160,7 +184,7 @@ noncomputable def autoencoderInterpreter : Program :=
             (Nat.pair (BitString.toNatExact y)
               (Nat.pair (BitString.toNatExact r) (BitString.toNatExact f'))) := by
       simpa [eval_autoencoderInterpreterCode, autoencoderMapCodeNat, autoencoderFeatureCodeNat,
-        autoencoderDecoded, autoencoderPayload, autoencoderOutput, hg, hfcode] using h
+        autoencoderDecoded, autoencoderPayload, autoencoderOutput, decodeAutoencoderPayload] using h
     have h'' :
         ∃ rNat,
           rNat ∈ Code.eval (storedProgramCode (BitString.toNatExact g)) (BitString.toNatExact x) ∧
@@ -212,7 +236,7 @@ noncomputable def autoencoderInterpreter : Program :=
       simpa [runs] using hfRuns
     rw [eval_autoencoderInterpreterCode]
     simp [autoencoderMapCodeNat, autoencoderFeatureCodeNat, autoencoderDecoded, autoencoderPayload,
-      autoencoderOutput]
+      autoencoderOutput, decodeAutoencoderPayload]
     rw [hg', Part.bind_some, hf', Part.bind_some]
 
 @[simp] theorem runs_autoencoderInterpreter_iff
@@ -241,27 +265,28 @@ theorem searchAutoencoderAccepts_iff {x g f : Program} :
     refine ⟨r, f, ?_, hcomp⟩
     exact (runs_autoencoderInterpreter_iff x g f x r).2 ⟨hgRuns, hfRuns⟩
 
-/-- Programs considered in phase `i` of the Section 4 dovetailing search. -/
-def phasePrograms : Nat → List Program
-  | 0 => []
-  | i + 1 => BitString.allUpToLength i
+/-- Programs considered in phase `i` of the Section 4 dovetailing search: precisely the valid
+self-delimiting autoencoder codewords of length at most `i`. -/
+def phasePrograms (i : Nat) : List Program :=
+  (BitString.allUpToLength i).filter (fun a => decide (IsAutoencoderPayload a))
 
 @[simp] theorem mem_phasePrograms_iff {a : Program} {i : Nat} :
-    a ∈ phasePrograms i ↔ BitString.blen a < i := by
-  cases i with
-  | zero =>
-      simp [phasePrograms]
-  | succ i =>
-      simp [phasePrograms]
+    a ∈ phasePrograms i ↔ IsAutoencoderPayload a ∧ BitString.blen a ≤ i := by
+  constructor
+  · intro ha
+    rcases List.mem_filter.1 ha with ⟨hmem, hvalid⟩
+    exact ⟨by simpa using hvalid, BitString.mem_allUpToLength_iff.1 hmem⟩
+  · rintro ⟨hvalid, hlen⟩
+    exact List.mem_filter.2 ⟨BitString.mem_allUpToLength_iff.2 hlen, by simpa using hvalid⟩
 
 /-- Number of machine steps allocated to program `a` in phase `i`. -/
 def phaseBudget (i : Nat) (a : Program) : Nat :=
-  if BitString.blen a < i then 2 ^ (i - BitString.blen a) else 0
+  if IsAutoencoderPayload a ∧ BitString.blen a ≤ i then 2 ^ (i - BitString.blen a) else 0
 
 theorem phaseBudget_eq_pow_of_mem_phasePrograms {a : Program} {i : Nat}
     (ha : a ∈ phasePrograms i) :
     phaseBudget i a = 2 ^ (i - BitString.blen a) := by
-  simp [phaseBudget, mem_phasePrograms_iff.mp ha]
+  simp [phaseBudget, (mem_phasePrograms_iff.mp ha).1, (mem_phasePrograms_iff.mp ha).2]
 
 /-- Search-tree node used by ALICE: current residual together with the feature path collected so
 far in forward order `f₁, ..., fₛ`. -/

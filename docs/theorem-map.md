@@ -40,6 +40,13 @@ Source: `1908.03781v2.pdf`
 - Lemma 4.1: running time bound on search at a node
 - Theorem 4.1: total running time / description guarantee for ALICE
 
+Current Lean status:
+
+- Lemma 4.1 is formalized for the concrete live Section 4 scheduler in
+  `IcTheory/Compression/Theorem41.lean`.
+- Theorem 4.1 is packaged in paper form in `IcTheory/Compression/Theorem41.lean`, with stronger
+  current-form arithmetic corollaries retained alongside it.
+
 ## Section 5
 
 - Definition 5.1: uniform Martin-Lof randomness test

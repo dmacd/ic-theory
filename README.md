@@ -21,11 +21,10 @@ Current compiled coverage includes:
 - the concrete Section 3.5 description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`, together with
   decoding, interpreters, and explicit length/prefix-complexity bounds
 - Section 4 autoencoder/search semantics: encoded autoencoder payloads and outputs, the fixed
-  interpreter `W`, ALICE / Greedy-ALICE branch semantics, phase programs and budgets, abstract
-  Lemma 4.1 prefix-phase bounds, uniform payload-length bounds for scheme steps, and
-  semantic/runtime-reduction current-form Theorem 4.1 results showing that incremental
-  `b`-compression schemes induce ALICE branches whose descriptions reconstruct `x` and whose
-  search cost reduces to a uniform Lemma 4.1 recurrence
+  interpreter `W`, ALICE / Greedy-ALICE branch semantics, concrete phase programs and budgets,
+  paper-form Lemma 4.1 for the live scheduler, and paper-form Theorem 4.1 showing that
+  incremental `b`-compression schemes induce ALICE branches whose descriptions reconstruct `x`
+  and whose search cost is bounded by the paper-style weighted sum
 
 The default library target builds with `lake build`.
 
@@ -36,7 +35,8 @@ The default library target builds with `lake build`.
 - `IcTheory.Computability`: the universal machine wrapper and the complexity/information layer
 - `IcTheory.Compression`: feature theory, Sections 2 to 4, the `b`-compressible scheme
   machinery, the concrete `D_s` encoding/interpreter, the paper-form Theorem 3.9 packaging, and
-  the current Theorem 4.1 semantic/runtime packaging
+  the paper-form Section 4 scheduler/runtime layer together with stronger current-form arithmetic
+  corollaries
 - `IcTheory.Sanity`: consistency checks and small integration lemmas
 
 ## Build

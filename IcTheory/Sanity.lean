@@ -193,20 +193,31 @@ example :
   · exact (runs_id_iff (ofNatExact 5) (ofNatExact 5)).2 rfl
 
 example :
-    ofNatExact 5 ∈ phasePrograms 4 := by
+    autoencoderPayload [] [] ∈ phasePrograms (blen (autoencoderPayload [] [])) := by
   rw [mem_phasePrograms_iff]
-  have hlen : blen (ofNatExact 5) ≤ 3 := by
-    calc
-      blen (ofNatExact 5) ≤ blen (ofNat 5) := blen_ofNatExact_le_ofNat 5
-      _ = Nat.size 5 := blen_ofNat_eq_size 5
-      _ = 3 := by decide
-  omega
+  exact ⟨isAutoencoderPayload_autoencoderPayload [] [], le_rfl⟩
 
-example : phaseTotalBudget 3 = 24 := by
-  simpa using phaseTotalBudget_eq 3
+example :
+    phaseBudget (blen (autoencoderPayload [] [])) (autoencoderPayload [] []) = 1 := by
+  have hmem :
+      autoencoderPayload [] [] ∈ phasePrograms (blen (autoencoderPayload [] [])) := by
+    rw [mem_phasePrograms_iff]
+    exact ⟨isAutoencoderPayload_autoencoderPayload [] [], le_rfl⟩
+  simpa using phaseBudget_eq_pow_of_mem_phasePrograms hmem
 
-example : nodeBudgetUntil ([] : Program) 3 = 14 := by
-  simpa using nodeBudgetUntil_eq_of_lt (a := ([] : Program)) (i := 3) (by simp)
+example : 1 ≤ phaseTotalBudget shortestAutoencoderPayloadLength := by
+  simpa using
+    (phaseTotalBudget_ge_shortestPayload (i := shortestAutoencoderPayloadLength) le_rfl)
+
+example :
+    nodeBudgetUntil (autoencoderPayload [] []) (blen (autoencoderPayload [] [])) = 1 := by
+  have hpayload : IsAutoencoderPayload (autoencoderPayload [] []) := by
+    simp
+  simpa using
+    (nodeBudgetUntil_eq_closed_of_payload
+      (a := autoencoderPayload [] [])
+      hpayload
+      (blen (autoencoderPayload [] [])))
 
 end Sanity
 
