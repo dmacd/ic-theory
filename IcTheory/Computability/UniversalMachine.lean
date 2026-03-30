@@ -27,6 +27,13 @@ def storedValueSentinel : Program := [false, false, false, true]
 def storedValuePackedProgram (p : Program) : Program :=
   storedValueSentinel ++ p
 
+/-- Reserved four-bit sentinel used to mark a stored payload paired with the live input. -/
+def packInputWithPayloadSentinel : Program := [true, false, false, true]
+
+/-- Plain-program wrapper that pairs the live input with a stored payload. -/
+def packInputWithPayloadPackedProgram (p : Program) : Program :=
+  packInputWithPayloadSentinel ++ p
+
 private def prefixReplaySentinelNat : Nat :=
   BitString.toNatExact prefixReplaySentinel
 
@@ -35,6 +42,9 @@ private def postcomposeSentinelNat : Nat :=
 
 private def storedValueSentinelNat : Nat :=
   BitString.toNatExact storedValueSentinel
+
+private def packInputWithPayloadSentinelNat : Nat :=
+  BitString.toNatExact packInputWithPayloadSentinel
 
 private def outerHeadNat (p : Program) : Nat :=
   BitString.toNatExact (BitString.splitAt 4 p).1
@@ -230,6 +240,8 @@ private noncomputable def programToCodeStep : Program → List Code → Option C
       some (twoCodeCompOrZero cs)
   | false :: false :: false :: true :: payload, _ =>
       some (Code.curry Code.left (BitString.toNatExact payload))
+  | true :: false :: false :: true :: payload, _ =>
+      some (Code.pair Code.id (Code.const (BitString.toNatExact payload)))
   | p, _ =>
       some (additiveProgramToCode p)
 
@@ -241,6 +253,8 @@ private theorem programToCodeStep_eq_headBased (p : Program) (cs : List Code) :
         some (twoCodeCompOrZero cs)
       else if outerHeadNat p = storedValueSentinelNat then
         some (Code.curry Code.left (outerPayloadNat p))
+      else if outerHeadNat p = packInputWithPayloadSentinelNat then
+        some (Code.pair Code.id (Code.const (outerPayloadNat p)))
       else
         some (additiveProgramToCode p) := by
   cases p with
@@ -248,6 +262,7 @@ private theorem programToCodeStep_eq_headBased (p : Program) (cs : List Code) :
       simp [programToCodeStep, outerHeadNat, outerPayloadNat, outerPayloadProgram,
         prefixReplaySentinel, prefixReplaySentinelNat, postcomposeSentinel,
         postcomposeSentinelNat, storedValueSentinel, storedValueSentinelNat,
+        packInputWithPayloadSentinel, packInputWithPayloadSentinelNat,
         BitString.splitAt_eq_take_drop, BitString.toNatExact]
   | cons b₁ t₁ =>
       cases t₁ with
@@ -256,6 +271,7 @@ private theorem programToCodeStep_eq_headBased (p : Program) (cs : List Code) :
             simp [programToCodeStep, outerHeadNat, outerPayloadNat, outerPayloadProgram,
               prefixReplaySentinel, prefixReplaySentinelNat, postcomposeSentinel,
               postcomposeSentinelNat, storedValueSentinel, storedValueSentinelNat,
+              packInputWithPayloadSentinel, packInputWithPayloadSentinelNat,
               BitString.splitAt_eq_take_drop, BitString.toNatExact]
       | cons b₂ t₂ =>
           cases t₂ with
@@ -264,6 +280,7 @@ private theorem programToCodeStep_eq_headBased (p : Program) (cs : List Code) :
                 simp [programToCodeStep, outerHeadNat, outerPayloadNat, outerPayloadProgram,
                   prefixReplaySentinel, prefixReplaySentinelNat, postcomposeSentinel,
                   postcomposeSentinelNat, storedValueSentinel, storedValueSentinelNat,
+                  packInputWithPayloadSentinel, packInputWithPayloadSentinelNat,
                   BitString.splitAt_eq_take_drop, BitString.toNatExact]
           | cons b₃ t₃ =>
               cases t₃ with
@@ -272,12 +289,14 @@ private theorem programToCodeStep_eq_headBased (p : Program) (cs : List Code) :
                     simp [programToCodeStep, outerHeadNat, outerPayloadNat, outerPayloadProgram,
                       prefixReplaySentinel, prefixReplaySentinelNat, postcomposeSentinel,
                       postcomposeSentinelNat, storedValueSentinel, storedValueSentinelNat,
+                      packInputWithPayloadSentinel, packInputWithPayloadSentinelNat,
                       BitString.splitAt_eq_take_drop, BitString.toNatExact]
               | cons b₄ payload =>
                   cases b₁ <;> cases b₂ <;> cases b₃ <;> cases b₄ <;>
                     simp [programToCodeStep, outerHeadNat, outerPayloadNat, outerPayloadProgram,
                       prefixReplaySentinel, prefixReplaySentinelNat, postcomposeSentinel,
                       postcomposeSentinelNat, storedValueSentinel, storedValueSentinelNat,
+                      packInputWithPayloadSentinel, packInputWithPayloadSentinelNat,
                       BitString.splitAt_eq_take_drop, BitString.toNatExact]
 
 private theorem programToCodeStep_primrec : Primrec₂ programToCodeStep := by
@@ -289,6 +308,8 @@ private theorem programToCodeStep_primrec : Primrec₂ programToCodeStep := by
         some (twoCodeCompOrZero cs)
       else if outerHeadNat p = storedValueSentinelNat then
         some (Code.curry Code.left (outerPayloadNat p))
+      else if outerHeadNat p = packInputWithPayloadSentinelNat then
+        some (Code.pair Code.id (Code.const (outerPayloadNat p)))
       else
         some (additiveProgramToCode p)) from funext (fun p => funext (programToCodeStep_eq_headBased p))]
   refine Primrec.ite ?_ ?_ ?_
@@ -309,7 +330,15 @@ private theorem programToCodeStep_primrec : Primrec₂ programToCodeStep := by
           (Nat.Partrec.Code.primrec₂_curry.comp
             (Primrec.const Code.left)
             (outerPayloadNat_primrec.comp Primrec.fst))).to₂
-      · exact (Primrec.option_some.comp (additiveProgramToCode_primrec.comp Primrec.fst)).to₂
+      · refine Primrec.ite ?_ ?_ ?_
+        · exact (Primrec.eq.comp (outerHeadNat_primrec.comp Primrec.fst)
+            (Primrec.const packInputWithPayloadSentinelNat))
+        · exact (Primrec.option_some.comp
+            (Nat.Partrec.Code.primrec₂_pair.comp
+              (Primrec.const Code.id)
+              (Nat.Partrec.Code.primrec_const.comp
+                (outerPayloadNat_primrec.comp Primrec.fst)))).to₂
+        · exact (Primrec.option_some.comp (additiveProgramToCode_primrec.comp Primrec.fst)).to₂
 
 /-- Interpret an exact bitstring as a partial-recursive program code. -/
 noncomputable def programToCode : Program → Code
@@ -320,6 +349,8 @@ noncomputable def programToCode : Program → Code
       Code.comp (programToCode gp.1) (programToCode gp.2)
   | false :: false :: false :: true :: payload =>
       Code.curry Code.left (BitString.toNatExact payload)
+  | true :: false :: false :: true :: payload =>
+      Code.pair Code.id (Code.const (BitString.toNatExact payload))
   | p =>
       additiveProgramToCode p
 termination_by p => BitString.blen p
@@ -368,7 +399,8 @@ private theorem programToCode_eq_additiveProgramToCode_of_notTagged
     (p : Program)
     (hPrefix : ∀ q : Program, p ≠ true :: true :: true :: true :: q)
     (hPostcompose : ∀ q : Program, p ≠ false :: true :: true :: true :: q)
-    (hStored : ∀ q : Program, p ≠ false :: false :: false :: true :: q) :
+    (hStored : ∀ q : Program, p ≠ false :: false :: false :: true :: q)
+    (hPair : ∀ q : Program, p ≠ true :: false :: false :: true :: q) :
     programToCode p = additiveProgramToCode p := by
   cases p with
   | nil =>
@@ -391,6 +423,8 @@ private theorem programToCode_eq_additiveProgramToCode_of_notTagged
                       first
                       | simpa [programToCode]
                       | exfalso
+                        exact hPair payload rfl
+                      | exfalso
                         exact hStored payload rfl
                       | exfalso
                         exact hPostcompose payload rfl
@@ -400,13 +434,15 @@ private theorem programToCode_eq_additiveProgramToCode_of_notTagged
 private theorem programToCode_eq_additiveProgramToCode_on_code (c : Code) :
     programToCode (additiveCodeToProgram c) =
       additiveProgramToCode (additiveCodeToProgram c) := by
-  refine programToCode_eq_additiveProgramToCode_of_notTagged (additiveCodeToProgram c) ?_ ?_ ?_
+  refine programToCode_eq_additiveProgramToCode_of_notTagged (additiveCodeToProgram c) ?_ ?_ ?_ ?_
   · intro q h
     exact additiveCodeToProgram_ne_prefixReplaySentinel c q h
   · intro q h
     exact additiveCodeToProgram_ne_postcomposeSentinel c q h
   · intro q h
     exact additiveCodeToProgram_ne_storedValueSentinel c q h
+  · intro q h
+    exact additiveCodeToProgram_ne_packInputWithPayloadSentinel c q h
 
 @[simp] theorem programToCode_codeToProgram (c : Code) :
     programToCode (codeToProgram c) = c := by
@@ -496,6 +532,11 @@ theorem runs_iff (p input output : BitString) :
       Code.curry Code.left (BitString.toNatExact p) := by
   simp [programToCode, storedValuePackedProgram, storedValueSentinel]
 
+@[simp] theorem programToCode_packInputWithPayloadPackedProgram (p : Program) :
+    programToCode (packInputWithPayloadPackedProgram p) =
+      Code.pair Code.id (Code.const (BitString.toNatExact p)) := by
+  simp [programToCode, packInputWithPayloadPackedProgram, packInputWithPayloadSentinel]
+
 @[simp] theorem blen_postcomposePackedProgram (g p : Program) :
     BitString.blen (postcomposePackedProgram g p) =
       BitString.blen p + BitString.blen g +
@@ -531,6 +572,10 @@ theorem runs_postcomposePackedProgram_of_runs
     BitString.blen (storedValuePackedProgram p) = BitString.blen p + 4 := by
   simp [storedValuePackedProgram, storedValueSentinel, BitString.blen]
 
+@[simp] theorem blen_packInputWithPayloadPackedProgram (p : Program) :
+    BitString.blen (packInputWithPayloadPackedProgram p) = BitString.blen p + 4 := by
+  simp [packInputWithPayloadPackedProgram, packInputWithPayloadSentinel, BitString.blen]
+
 @[simp] theorem runs_storedValuePackedProgram_iff (payload input output : BitString) :
     runs (storedValuePackedProgram payload) input output ↔ output = payload := by
   rw [runs_iff, programToCode_storedValuePackedProgram]
@@ -545,6 +590,23 @@ theorem runs_postcomposePackedProgram_of_runs
   · intro h
     subst output
     simp [Nat.Partrec.Code.eval, Nat.Partrec.Code.eval_curry]
+
+@[simp] theorem runs_packInputWithPayloadPackedProgram_iff (payload input output : BitString) :
+    runs (packInputWithPayloadPackedProgram payload) input output ↔
+      output = BitString.ofNatExact
+        (Nat.pair (BitString.toNatExact input) (BitString.toNatExact payload)) := by
+  rw [runs_iff, programToCode_packInputWithPayloadPackedProgram]
+  constructor
+  · intro h
+    have h' :
+        Part.some (Nat.pair (BitString.toNatExact input) (BitString.toNatExact payload)) =
+          Part.some (BitString.toNatExact output) := by
+      simpa [Nat.Partrec.Code.eval, Seq.seq] using h
+    apply BitString.toNatExact_injective
+    simpa using h'.symm
+  · intro h
+    subst output
+    simp [Nat.Partrec.Code.eval, Seq.seq]
 
 @[simp] theorem runs_codeToProgram_iff (c : Code) (input output : BitString) :
     runs (codeToProgram c) input output ↔

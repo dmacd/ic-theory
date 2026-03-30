@@ -544,6 +544,12 @@ theorem additiveCodeToProgram_ne_storedValueSentinel (c : Code) (q : Program) :
     simp [additiveCodeToProgram, zeroBits, succBits, leftBits, rightBits,
       pairBits, compBits, precBits, rfindBits]
 
+theorem additiveCodeToProgram_ne_packInputWithPayloadSentinel (c : Code) (q : Program) :
+    additiveCodeToProgram c ≠ true :: false :: false :: true :: q := by
+  cases c <;>
+    simp [additiveCodeToProgram, zeroBits, succBits, leftBits, rightBits,
+      pairBits, compBits, precBits, rfindBits]
+
 end UniversalMachine
 
 end IcTheory

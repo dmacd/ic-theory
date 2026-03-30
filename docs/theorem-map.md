@@ -50,8 +50,8 @@ Current Lean status:
 ## Section 5
 
 - Definition 5.1: uniform Martin-Lof randomness test
-- Theorem 5.1: from features to randomness tests
-- Theorem 5.2: from randomness tests to features
+- Theorem 5.1: paper-form in `IcTheory/Compression/Theorem51.lean`
+- Theorem 5.2: paper-form in `IcTheory/Compression/Theorem52.lean`
 
 ## Formalization order
 

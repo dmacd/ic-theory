@@ -39,6 +39,7 @@ def randomnessLevelSet (δ : Program → Nat) (n m : Nat) : List Program :=
 structure IsUniformMartinLofTest (δ : Program → Nat) : Prop where
   lowerSemicomputable : IsLowerSemicomputable δ
   levelBound : ∀ n m, (randomnessLevelSet δ n m).length ≤ 2 ^ (n - m)
+  empty_of_length_lt : ∀ {n m}, n < m → randomnessLevelSet δ n m = []
 
 /-- Exact per-residual deficiency contribution of a fixed plain program `f` on input `x`. -/
 noncomputable def featureDeficiencyCandidate (f x r : Program) : Nat := by
@@ -482,11 +483,26 @@ theorem featureRandomness_levelBound (f : Program) :
             rw [hk1]
             exact Nat.sub_le _ _
 
+theorem featureRandomness_levelSet_eq_nil_of_lt (f : Program) {n m : Nat}
+    (hnm : n < m) :
+    randomnessLevelSet (featureRandomnessTest f) n m = [] := by
+  refine List.eq_nil_iff_forall_not_mem.2 ?_
+  intro x hx
+  rcases (mem_randomnessLevelSet_iff).1 hx with ⟨hxn, hxm⟩
+  have hmpos : 0 < m := lt_of_le_of_lt (Nat.zero_le n) hnm
+  rcases exists_residual_of_featureRandomnessTest_ge (f := f) (x := x) hmpos hxm with
+    ⟨r, hrmem, hlt, hrun, hmle⟩
+  have hmle' : m ≤ n - BitString.blen r - 1 := by
+    simpa [hxn] using hmle
+  omega
+
 theorem featureRandomnessTest_isUniformMartinLofTest (f : Program) :
     IsUniformMartinLofTest (featureRandomnessTest f) := by
-  refine ⟨featureRandomnessTest_lowerSemicomputable f, ?_⟩
-  intro n m
-  exact featureRandomness_levelBound f n m
+  refine ⟨featureRandomnessTest_lowerSemicomputable f, ?_, ?_⟩
+  · intro n m
+    exact featureRandomness_levelBound f n m
+  · intro n m hnm
+    exact featureRandomness_levelSet_eq_nil_of_lt f hnm
 
 /-- Paper-facing Theorem 5.1. The assumption that `f` is a feature somewhere is stronger than
 what the current formalization actually needs, but keeps the statement aligned with the paper. -/

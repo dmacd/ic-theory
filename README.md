@@ -5,7 +5,7 @@ Lean 4 + Mathlib formalization workspace for *A theory of incremental compressio
 ## Status
 
 The development now covers the paper's foundations, the complexity layer, the Section 2/3 theorem
-chain, and a concrete Section 4 search-semantics layer.
+chain, the concrete Section 4 search-semantics layer, and the Section 5 randomness layer.
 
 Current compiled coverage includes:
 
@@ -25,6 +25,8 @@ Current compiled coverage includes:
   paper-form Lemma 4.1 for the live scheduler, and paper-form Theorem 4.1 showing that
   incremental `b`-compression schemes induce ALICE branches whose descriptions reconstruct `x`
   and whose search cost is bounded by the paper-style weighted sum
+- Section 5 Martin-Lof randomness: paper-form Theorem 5.1 from features to randomness tests and
+  paper-form Theorem 5.2 from uniform unbounded randomness tests back to a single feature
 
 The default library target builds with `lake build`.
 
@@ -33,10 +35,10 @@ The default library target builds with `lake build`.
 - `IcTheory.Basics`: bitstrings, finite enumerators, prefix/pair encodings, internal encodings,
   and logarithmic bound infrastructure
 - `IcTheory.Computability`: the universal machine wrapper and the complexity/information layer
-- `IcTheory.Compression`: feature theory, Sections 2 to 4, the `b`-compressible scheme
-  machinery, the concrete `D_s` encoding/interpreter, the paper-form Theorem 3.9 packaging, and
-  the paper-form Section 4 scheduler/runtime layer together with stronger current-form arithmetic
-  corollaries
+- `IcTheory.Compression`: feature theory, Sections 2 to 5, the `b`-compressible scheme
+  machinery, the concrete `D_s` encoding/interpreter, the paper-form Theorem 3.9 packaging, the
+  paper-form Section 4 scheduler/runtime layer together with stronger current-form arithmetic
+  corollaries, and the Section 5 randomness/test bridge
 - `IcTheory.Sanity`: consistency checks and small integration lemmas
 
 ## Build
