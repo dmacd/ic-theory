@@ -3,6 +3,8 @@ import IcTheory.Compression.Section32
 import IcTheory.Compression.Theorem39
 import IcTheory.Compression.Section4
 import IcTheory.Compression.Theorem41
+import IcTheory.Compression.Theorem51
+import IcTheory.Compression.Theorem52
 
 namespace IcTheory
 
@@ -218,6 +220,22 @@ example :
       (a := autoencoderPayload [] [])
       hpayload
       (blen (autoencoderPayload [] [])))
+
+example : randomnessLevelSet (fun _ => 0) 2 0 = BitString.allOfLength 2 := by
+  simp [randomnessLevelSet]
+
+example : randomnessLevelSet (fun _ => 0) 2 1 = [] := by
+  simp [randomnessLevelSet]
+
+example {f : Program} (hf : ∃ x, IsFeature runs f x) :
+    IsUniformMartinLofTest (featureRandomnessTest f) := by
+  exact theorem51 hf
+
+example {δ : Program → Nat}
+    (hδ : IsUniformMartinLofTest δ)
+    (hunbounded : IsUnboundedMartinLofTest δ) :
+    ∃ f : Program, ∀ x : Program, BitString.blen f < δ x → IsFeature runs f x := by
+  exact theorem52 hδ hunbounded
 
 end Sanity
 
