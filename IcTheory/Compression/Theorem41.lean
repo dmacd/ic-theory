@@ -1,4 +1,5 @@
 import IcTheory.Compression.Section4
+import IcTheory.Computability.FinitePrefixDescriptions
 import Mathlib.Algebra.BigOperators.Group.Finset.Basic
 import Mathlib.Algebra.BigOperators.Group.Finset.Sigma
 import Mathlib.Algebra.BigOperators.Group.List.Basic
@@ -492,6 +493,83 @@ theorem searchAutoencoderAccepts_of_bCompressionSchemeStep
     SearchAutoencoderAccepts x (autoencoderPayload g f) := by
   exact (searchAutoencoderAccepts_iff (x := x) (g := g) (f := f)).2
     ⟨r, bCompressionSchemeStep_isAutoencoderStep hstep⟩
+
+/-- Least bounded-evaluation fuel witnessing a successful plain run. This turns an existing
+`runs` proof into the concrete local runtime parameter used in Section 4. -/
+noncomputable def runtimeOfRuns
+    {p input output : Program}
+    (hrun : runs p input output) : Nat :=
+  Nat.find (prefixOutputAtFuel_complete hrun)
+
+theorem runtimeOfRuns_spec
+    {p input output : Program}
+    (hrun : runs p input output) :
+    prefixOutputAtFuel (runtimeOfRuns hrun) p input = some output :=
+  Nat.find_spec (prefixOutputAtFuel_complete hrun)
+
+/-- Concrete runtime of the descriptive map `g_i` on `r_{i-1}` along a Section 3.5 step. -/
+noncomputable def mapRuntimeOfStep
+    {b : Nat} {x f g r : Program}
+    (hstep : BCompressionSchemeStep b x f g r) : Nat :=
+  runtimeOfRuns hstep.mapRuns
+
+/-- Concrete runtime of the feature `f_i` on `r_i` along a Section 3.5 step. -/
+noncomputable def featureRuntimeOfStep
+    {b : Nat} {x f g r : Program}
+    (hstep : BCompressionSchemeStep b x f g r) : Nat :=
+  runtimeOfRuns hstep.featureRuns
+
+/-- Existence of concrete Section 4 runtime witnesses for the maps `g_i` and features `f_i`
+appearing in an incremental `b`-compression scheme. Because the scheme relation lives in `Prop`,
+the witness lists are exposed through this theorem and then chosen noncomputably below. -/
+theorem exists_incrementalBCompressionSchemeRuntimes
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    ∃ works : List Nat × List Nat,
+      fs.length = works.1.length ∧ gs.length = works.2.length := by
+  induction hchain with
+  | stop_small =>
+      exact ⟨([], []), by simp⟩
+  | stop_incompressible =>
+      exact ⟨([], []), by simp⟩
+  | @cons x f g r rs fs gs hbig hbc hstep hrest ih =>
+      rcases ih with ⟨works, hfeatureLen, hmapLen⟩
+      refine ⟨(featureRuntimeOfStep hstep :: works.1, mapRuntimeOfStep hstep :: works.2), ?_⟩
+      simp [hfeatureLen, hmapLen]
+
+/-- Runtime witnesses extracted from the actual descriptive maps and features in an incremental
+`b`-compression scheme. The first component stores the `f_i` runtimes and the second stores the
+`g_i` runtimes. -/
+noncomputable def incrementalBCompressionSchemeRuntimes
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) : List Nat × List Nat :=
+  Classical.choose (exists_incrementalBCompressionSchemeRuntimes hchain)
+
+/-- Actual bounded-evaluation runtimes of the features `f_i` in an incremental
+`b`-compression scheme. -/
+noncomputable def incrementalBCompressionSchemeFeatureRuntimes
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) : List Nat :=
+  (incrementalBCompressionSchemeRuntimes hchain).1
+
+/-- Actual bounded-evaluation runtimes of the descriptive maps `g_i` in an incremental
+`b`-compression scheme. -/
+noncomputable def incrementalBCompressionSchemeMapRuntimes
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) : List Nat :=
+  (incrementalBCompressionSchemeRuntimes hchain).2
+
+theorem incrementalBCompressionSchemeFeatureRuntimes_length
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    fs.length = (incrementalBCompressionSchemeFeatureRuntimes hchain).length := by
+  exact (Classical.choose_spec (exists_incrementalBCompressionSchemeRuntimes hchain)).1
+
+theorem incrementalBCompressionSchemeMapRuntimes_length
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    gs.length = (incrementalBCompressionSchemeMapRuntimes hchain).length := by
+  exact (Classical.choose_spec (exists_incrementalBCompressionSchemeRuntimes hchain)).2
 
 private theorem exists_aliceBranch_extension_of_incrementalBCompressionScheme
     {b : Nat} {x current rs : Program} {startNode : AliceNode} {fs gs : List Program}
@@ -1259,12 +1337,10 @@ theorem theorem41_current
     theorem41_runtimeReduction_closed_split hb hchain hfeatureLen hmapLen
   exact ⟨node, hnode, hdesc, hruns, hexact, huniform, hclosed⟩
 
-/-- Paper-form Theorem 4.1 for the Section 3.5 incremental `b`-compression scheme. ALICE finds
-the branch carrying the features `f₁, ..., fₛ` and description `D_s = ⟨s, r_s, f_s, ..., f_1⟩`, and
-the total search time is bounded by the paper-style weighted sum with cumulative exponent
-`∑_{k≤i} (l(f_k) + l(f_k') + autoencoderPaperOverhead b)`, i.e. by
-`∑ (t_i + t_i' + 1) 2^{∑_{k≤i}(l(f_k) + l(f_k')) + O(i)}`. -/
-theorem theorem41
+/-- Runtime-parameterized paper-form theorem for the current Section 4 branch semantics. The
+lists `featureWork` and `mapWork` may be instantiated with the actual bounded-evaluation runtimes
+extracted from the corresponding `runs` proofs. -/
+theorem theorem41_parametric
     {b : Nat} {x rs : Program} {fs gs : List Program}
     {featureWork mapWork : List Nat}
     (hb : 1 < b)
@@ -1296,6 +1372,42 @@ theorem theorem41
   refine ⟨node, hnode, hfeatures, hdesc, hruns, ?_⟩
   simpa [localWork] using
     (le_trans hbound (le_of_eq (branchSearchTimePaperBound_eq_sum_explicitTerms b fs gs localWork)))
+
+/-- Paper-form Theorem 4.1 for the Section 3.5 incremental `b`-compression scheme, instantiated
+with the actual bounded-evaluation runtimes of the maps `g_i` and features `f_i` appearing in the
+scheme. This removes the arbitrary time lists from the main theorem statement, while still
+remaining a theorem about the current Section 4 branch semantics rather than a full operational
+formalization of Algorithm 2. ALICE finds
+the branch carrying the features `f₁, ..., fₛ` and description `D_s = ⟨s, r_s, f_s, ..., f_1⟩`, and
+the total search time is bounded by the paper-style weighted sum with cumulative exponent
+`∑_{k≤i} (l(f_k) + l(f_k') + autoencoderPaperOverhead b)`, i.e. by
+`∑ (t_i + t_i' + 1) 2^{∑_{k≤i}(l(f_k) + l(f_k')) + O(i)}`. -/
+theorem theorem41
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hb : 1 < b)
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    let featureWork := incrementalBCompressionSchemeFeatureRuntimes hchain
+    let mapWork := incrementalBCompressionSchemeMapRuntimes hchain
+    ∃ node, IsAliceBranch x node ∧ node.features = fs ∧
+      node.description = schemeDescription rs fs ∧
+      runs schemeDescriptionInterpreter node.description x ∧
+      branchSearchTimeBound fs gs (List.zipWith (· + ·) featureWork mapWork) ≤
+        (branchSearchTimePaperExplicitTerms b fs gs
+          (List.zipWith (· + ·) featureWork mapWork)).sum := by
+  let featureWork := incrementalBCompressionSchemeFeatureRuntimes hchain
+  let mapWork := incrementalBCompressionSchemeMapRuntimes hchain
+  have hfeatureLen : fs.length = featureWork.length := by
+    simpa [featureWork] using incrementalBCompressionSchemeFeatureRuntimes_length hchain
+  have hmapLen : gs.length = mapWork.length := by
+    simpa [mapWork] using incrementalBCompressionSchemeMapRuntimes_length hchain
+  simpa [featureWork, mapWork] using
+    (theorem41_parametric
+      (hb := hb)
+      (hchain := hchain)
+      (featureWork := featureWork)
+      (mapWork := mapWork)
+      hfeatureLen
+      hmapLen)
 
 end
 

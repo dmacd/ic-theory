@@ -42,10 +42,17 @@ Source: `1908.03781v2.pdf`
 
 Current Lean status:
 
-- Lemma 4.1 is formalized for the concrete live Section 4 scheduler in
+- `IcTheory/Compression/Section4.lean` formalizes the fixed machine `W`, the accepted
+  autoencoder-step predicate, concrete phase programs/budgets, and search-tree semantics
+  (`AliceNode`, `IsAliceBranch`) for ALICE / Greedy-ALICE.
+- This is not yet a literal operational formalization of the printed recursive Algorithm 2 with an
+  explicit per-program status dictionary and a global list `D`.
+- Lemma 4.1 is formalized for the concrete live scheduler in
   `IcTheory/Compression/Theorem41.lean`.
-- Theorem 4.1 is packaged in paper form in `IcTheory/Compression/Theorem41.lean`, with stronger
-  current-form arithmetic corollaries retained alongside it.
+- The main Section 4 theorem in `IcTheory/Compression/Theorem41.lean` now instantiates the paper's
+  `t_i` and `t_i'` with actual bounded-evaluation runtimes extracted from the corresponding `runs`
+  proofs, but it is still a theorem about the current search-tree/scheduler semantics rather than a
+  proof about executing Algorithm 2 verbatim.
 
 ## Section 5
 

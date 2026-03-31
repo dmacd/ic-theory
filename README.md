@@ -21,10 +21,11 @@ Current compiled coverage includes:
 - the concrete Section 3.5 description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`, together with
   decoding, interpreters, and explicit length/prefix-complexity bounds
 - Section 4 autoencoder/search semantics: encoded autoencoder payloads and outputs, the fixed
-  interpreter `W`, ALICE / Greedy-ALICE branch semantics, concrete phase programs and budgets,
-  paper-form Lemma 4.1 for the live scheduler, and paper-form Theorem 4.1 showing that
-  incremental `b`-compression schemes induce ALICE branches whose descriptions reconstruct `x`
-  and whose search cost is bounded by the paper-style weighted sum
+  interpreter `W`, concrete ALICE / Greedy-ALICE branch semantics, concrete phase programs and
+  budgets, paper-form Lemma 4.1 for the live scheduler, and a Section 4 Theorem 4.1 wrapper
+  showing that incremental `b`-compression schemes induce ALICE branches whose descriptions
+  reconstruct `x` and whose search cost is bounded by the paper-style weighted sum using actual
+  bounded-evaluation runtimes of the displayed `f_i` and `f_i'`
 - Section 5 Martin-Lof randomness: paper-form Theorem 5.1 from features to randomness tests and
   paper-form Theorem 5.2 from uniform unbounded randomness tests back to a single feature
 
@@ -37,8 +38,8 @@ The default library target builds with `lake build`.
 - `IcTheory.Computability`: the universal machine wrapper and the complexity/information layer
 - `IcTheory.Compression`: feature theory, Sections 2 to 5, the `b`-compressible scheme
   machinery, the concrete `D_s` encoding/interpreter, the paper-form Theorem 3.9 packaging, the
-  paper-form Section 4 scheduler/runtime layer together with stronger current-form arithmetic
-  corollaries, and the Section 5 randomness/test bridge
+  Section 4 scheduler/runtime layer together with stronger current-form arithmetic corollaries,
+  and the Section 5 randomness/test bridge
 - `IcTheory.Sanity`: consistency checks and small integration lemmas
 
 ## Stronger Results
@@ -93,6 +94,11 @@ How to interpret the results:
   used by Mathlib developments. Project-local axiom names would be a red flag.
 - Local commands such as `set_option maxHeartbeats ... in` only raise Lean's elaboration budget for
   expensive proofs. They do not add assumptions or weaken soundness.
+
+One important scope note: Section 4 currently formalizes a concrete scheduler and search-tree
+semantics around the paper's machine `W`, plus a theorem-level runtime wrapper instantiated by
+actual bounded-evaluation runtimes. It does not yet formalize the printed recursive Algorithm 2
+state verbatim with an explicit per-program status dictionary and global list `D`.
 
 ## Project Notes
 
