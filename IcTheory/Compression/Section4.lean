@@ -349,6 +349,87 @@ theorem greedyAliceStep_iff {state next : GreedyAliceState} :
   · rintro ⟨g, f, r, hg, hf, hcomp, rfl⟩
     exact ⟨g, f, r, ⟨hg, hf, hcomp⟩, rfl⟩
 
+/-- Per-program status used by the printed Algorithm 2. A successful autoencoder payload stores
+the child residual and the recursively accumulated feature list `F` in the paper's newest-first
+order. -/
+inductive AliceProgramStatus where
+  | unhalted
+  | halted
+  | child (residual : Program) (featuresRev : List Program)
+
+/-- Default status dictionary for Algorithm 2: every autoencoder payload starts unhalted. -/
+def defaultAliceStatus : Program → AliceProgramStatus :=
+  fun _ => AliceProgramStatus.unhalted
+
+/-- Update one entry of the Algorithm 2 status dictionary. -/
+def setAliceStatus
+    (status : Program → AliceProgramStatus)
+    (a : Program)
+    (entry : AliceProgramStatus) : Program → AliceProgramStatus :=
+  fun a' => if a' = a then entry else status a'
+
+/-- Per-call state of the printed recursive routine `SearchAutoencoderRecursively(x, F)`. The
+feature accumulator is stored in the paper's newest-first order. -/
+structure AliceCallState where
+  input : Program
+  featuresRev : List Program
+  status : Program → AliceProgramStatus
+
+/-- One focused recursive branch of Algorithm 2, carrying the call states visited from the root
+call down to the terminal call. -/
+inductive AliceOperationalPath where
+  | stop (state : AliceCallState)
+  | step (state : AliceCallState) (child : AliceOperationalPath)
+
+/-- Root call of Algorithm 2. -/
+def AliceCallState.root (x : Program) : AliceCallState :=
+  ⟨x, [], defaultAliceStatus⟩
+
+/-- Root call state of an operational Algorithm 2 branch. -/
+def AliceOperationalPath.rootState : AliceOperationalPath → AliceCallState
+  | .stop state => state
+  | .step state _ => state
+
+/-- Terminal call state of an operational Algorithm 2 branch. -/
+def AliceOperationalPath.terminalState : AliceOperationalPath → AliceCallState
+  | .stop state => state
+  | .step _ child => child.terminalState
+
+/-- Description object appended to the global list `D` by Algorithm 2 after a successful step.
+The paper stores the feature accumulator in newest-first order, while `schemeDescription` expects
+the forward order `f₁, ..., fₛ`, so we reverse here. -/
+def aliceDescription (r : Program) (featuresRev : List Program) : Program :=
+  schemeDescription r featuresRev.reverse
+
+@[simp] theorem AliceCallState_root_input (x : Program) :
+    (AliceCallState.root x).input = x := rfl
+
+@[simp] theorem AliceCallState_root_featuresRev (x : Program) :
+    (AliceCallState.root x).featuresRev = [] := rfl
+
+@[simp] theorem AliceOperationalPath_rootState_stop (state : AliceCallState) :
+    (AliceOperationalPath.stop state).rootState = state := rfl
+
+@[simp] theorem AliceOperationalPath_rootState_step
+    (state : AliceCallState) (child : AliceOperationalPath) :
+    (AliceOperationalPath.step state child).rootState = state := rfl
+
+@[simp] theorem AliceOperationalPath_terminalState_stop (state : AliceCallState) :
+    (AliceOperationalPath.stop state).terminalState = state := rfl
+
+@[simp] theorem AliceOperationalPath_terminalState_step
+    (state : AliceCallState) (child : AliceOperationalPath) :
+    (AliceOperationalPath.step state child).terminalState = child.terminalState := rfl
+
+@[simp] theorem aliceDescription_nil (r : Program) :
+    aliceDescription r [] = schemeDescription r [] := by
+  simp [aliceDescription]
+
+@[simp] theorem aliceDescription_cons (r f : Program) (featuresRev : List Program) :
+    aliceDescription r (f :: featuresRev) =
+      schemeDescription r ((f :: featuresRev).reverse) := by
+  rfl
+
 end
 
 end Compression

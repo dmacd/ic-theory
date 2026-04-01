@@ -641,6 +641,108 @@ theorem theorem41_semantic
   · simpa [AliceNode.description, hres, hfeatures] using
       schemeDescriptionInterpreter_runs_of_incrementalBCompressionScheme hchain
 
+/-- Focused operational realization of the printed recursive Algorithm 2 along one successful
+branch. The parameter `prefixRev` is the paper's accumulated feature list `F` in newest-first
+order at the current recursive call. The global list `D` stores the descriptions appended by that
+branch in the order they are discovered. -/
+inductive IsAliceOperationalPath :
+    Program → List Program → List Program → List Program → Program →
+    AliceOperationalPath → List Program → Prop
+  | stop (current : Program) (prefixRev : List Program) :
+      IsAliceOperationalPath current prefixRev [] [] current
+        (.stop ⟨current, prefixRev, defaultAliceStatus⟩) []
+  | cons {current : Program} {prefixRev : List Program}
+      {f g r rs : Program} {fs gs : List Program}
+      {child : AliceOperationalPath} {descriptions : List Program}
+      (hchild : IsAliceOperationalPath r (f :: prefixRev) fs gs rs child descriptions) :
+      IsAliceOperationalPath current prefixRev (f :: fs) (g :: gs) rs
+        (.step
+          ⟨current, prefixRev,
+            setAliceStatus defaultAliceStatus (autoencoderPayload g f)
+              (.child r (f :: prefixRev))⟩
+          child)
+        (aliceDescription r (f :: prefixRev) :: descriptions)
+
+theorem operationalPath_rootState
+    {current : Program} {prefixRev : List Program} {fs gs : List Program} {rs : Program}
+    {path : AliceOperationalPath} {descriptions : List Program}
+    (hpath : IsAliceOperationalPath current prefixRev fs gs rs path descriptions) :
+    path.rootState.input = current ∧ path.rootState.featuresRev = prefixRev := by
+  cases hpath <;> simp [AliceOperationalPath.rootState]
+
+theorem operationalPath_terminalState
+    {current : Program} {prefixRev : List Program} {fs gs : List Program} {rs : Program}
+    {path : AliceOperationalPath} {descriptions : List Program}
+    (hpath : IsAliceOperationalPath current prefixRev fs gs rs path descriptions) :
+    path.terminalState.input = rs ∧
+      path.terminalState.featuresRev = fs.reverse ++ prefixRev := by
+  induction hpath with
+  | stop current prefixRev =>
+      simp [AliceOperationalPath.terminalState]
+  | @cons current prefixRev f g r rs fs gs child descriptions hchild ih =>
+      simpa [AliceOperationalPath.terminalState, List.reverse_cons, List.append_assoc] using ih
+
+theorem operationalPath_descriptions_eq_nil
+    {current : Program} {prefixRev : List Program} {fs gs : List Program} {rs : Program}
+    {path : AliceOperationalPath} {descriptions : List Program}
+    (hpath : IsAliceOperationalPath current prefixRev fs gs rs path descriptions)
+    (hfs : fs = []) :
+    descriptions = [] := by
+  subst hfs
+  cases hpath
+  rfl
+
+theorem operationalPath_finalDescription_mem_of_ne_nil
+    {current : Program} {prefixRev : List Program} {fs gs : List Program} {rs : Program}
+    {path : AliceOperationalPath} {descriptions : List Program}
+    (hpath : IsAliceOperationalPath current prefixRev fs gs rs path descriptions)
+    (hfs : fs ≠ []) :
+    aliceDescription rs (fs.reverse ++ prefixRev) ∈ descriptions := by
+  induction hpath with
+  | stop current prefixRev =>
+      exfalso
+      exact hfs rfl
+  | @cons current prefixRev f g r rs fs gs child descriptions hchild ih =>
+      by_cases htail : fs = []
+      · subst htail
+        cases hchild
+        simp [aliceDescription]
+      · have hmem :
+            aliceDescription rs (fs.reverse ++ (f :: prefixRev)) ∈ descriptions := by
+          exact ih htail
+        simpa [List.reverse_cons, List.append_assoc] using
+          List.mem_cons_of_mem (aliceDescription r (f :: prefixRev)) hmem
+
+private theorem exists_operationalPath_extension_of_incrementalBCompressionScheme
+    {b : Nat} {current rs : Program} {fs gs : List Program}
+    (prefixRev : List Program)
+    (hchain : IsIncrementalBCompressionScheme b current fs gs rs) :
+    ∃ path descriptions,
+      IsAliceOperationalPath current prefixRev fs gs rs path descriptions := by
+  induction hchain generalizing prefixRev with
+  | stop_small current hsmall =>
+      exact ⟨.stop ⟨current, prefixRev, defaultAliceStatus⟩, [], .stop current prefixRev⟩
+  | stop_incompressible current hnot =>
+      exact ⟨.stop ⟨current, prefixRev, defaultAliceStatus⟩, [], .stop current prefixRev⟩
+  | @cons current f g r rs fs gs hbig hbc hstep hrest ih =>
+      obtain ⟨child, descriptions, hchild⟩ := ih (f :: prefixRev)
+      exact ⟨
+        .step
+          ⟨current, prefixRev,
+            setAliceStatus defaultAliceStatus (autoencoderPayload g f)
+              (.child r (f :: prefixRev))⟩
+          child,
+        aliceDescription r (f :: prefixRev) :: descriptions,
+        .cons hchild
+      ⟩
+
+theorem exists_operationalPath_of_incrementalBCompressionScheme
+    {b : Nat} {x rs : Program} {fs gs : List Program}
+    (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
+    ∃ path descriptions,
+      IsAliceOperationalPath x [] fs gs rs path descriptions := by
+  simpa using exists_operationalPath_extension_of_incrementalBCompressionScheme [] hchain
+
 /-- Uniform length bound for any autoencoder payload `g' f` appearing in an incremental
 `b`-compression scheme. This is the Section 4 constant obtained by combining the bounded feature
 length from Theorem 3.7 with the bounded descriptive-map length from Theorem 3.8. -/
@@ -1373,22 +1475,26 @@ theorem theorem41_parametric
   simpa [localWork] using
     (le_trans hbound (le_of_eq (branchSearchTimePaperBound_eq_sum_explicitTerms b fs gs localWork)))
 
-/-- Paper-form Theorem 4.1 for the Section 3.5 incremental `b`-compression scheme, instantiated
+/-- Paper-facing Theorem 4.1 for the Section 3.5 incremental `b`-compression scheme, instantiated
 with the actual bounded-evaluation runtimes of the maps `g_i` and features `f_i` appearing in the
-scheme. This removes the arbitrary time lists from the main theorem statement, while still
-remaining a theorem about the current Section 4 branch semantics rather than a full operational
-formalization of Algorithm 2. ALICE finds
-the branch carrying the features `f₁, ..., fₛ` and description `D_s = ⟨s, r_s, f_s, ..., f_1⟩`, and
-the total search time is bounded by the paper-style weighted sum with cumulative exponent
-`∑_{k≤i} (l(f_k) + l(f_k') + autoencoderPaperOverhead b)`, i.e. by
-`∑ (t_i + t_i' + 1) 2^{∑_{k≤i}(l(f_k) + l(f_k')) + O(i)}`. -/
+scheme. Besides the search-tree branch witness, it now returns a focused Algorithm 2-style
+operational path carrying explicit per-program status dictionaries and the global description log
+`D` along the successful recursive branch. -/
 theorem theorem41
     {b : Nat} {x rs : Program} {fs gs : List Program}
     (hb : 1 < b)
     (hchain : IsIncrementalBCompressionScheme b x fs gs rs) :
     let featureWork := incrementalBCompressionSchemeFeatureRuntimes hchain
     let mapWork := incrementalBCompressionSchemeMapRuntimes hchain
-    ∃ node, IsAliceBranch x node ∧ node.features = fs ∧
+    ∃ node path descriptions,
+      IsAliceBranch x node ∧ node.features = fs ∧
+      IsAliceOperationalPath x [] fs gs rs path descriptions ∧
+      path.rootState.input = x ∧
+      path.rootState.featuresRev = [] ∧
+      path.terminalState.input = rs ∧
+      path.terminalState.featuresRev = fs.reverse ∧
+      (fs = [] → descriptions = []) ∧
+      (fs ≠ [] → schemeDescription rs fs ∈ descriptions) ∧
       node.description = schemeDescription rs fs ∧
       runs schemeDescriptionInterpreter node.description x ∧
       branchSearchTimeBound fs gs (List.zipWith (· + ·) featureWork mapWork) ≤
@@ -1400,14 +1506,28 @@ theorem theorem41
     simpa [featureWork] using incrementalBCompressionSchemeFeatureRuntimes_length hchain
   have hmapLen : gs.length = mapWork.length := by
     simpa [mapWork] using incrementalBCompressionSchemeMapRuntimes_length hchain
-  simpa [featureWork, mapWork] using
-    (theorem41_parametric
+  obtain ⟨node, hnode, hfeatures, hdesc, hruns, hbound⟩ :=
+    theorem41_parametric
       (hb := hb)
       (hchain := hchain)
       (featureWork := featureWork)
       (mapWork := mapWork)
       hfeatureLen
-      hmapLen)
+      hmapLen
+  obtain ⟨path, descriptions, hpath⟩ :=
+    exists_operationalPath_of_incrementalBCompressionScheme hchain
+  have hroot := operationalPath_rootState hpath
+  have hterminal := operationalPath_terminalState hpath
+  refine ⟨node, path, descriptions, hnode, hfeatures, hpath, hroot.1, hroot.2, hterminal.1, ?_, ?_, ?_, hdesc, hruns, ?_⟩
+  · simpa using hterminal.2
+  · intro hfs
+    exact operationalPath_descriptions_eq_nil hpath hfs
+  · intro hfs
+    have hmem :
+        aliceDescription rs (fs.reverse ++ []) ∈ descriptions := by
+      exact operationalPath_finalDescription_mem_of_ne_nil hpath hfs
+    simpa [aliceDescription] using hmem
+  · simpa [featureWork, mapWork] using hbound
 
 end
 

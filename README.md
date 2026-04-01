@@ -21,11 +21,13 @@ Current compiled coverage includes:
 - the concrete Section 3.5 description object `D_s = ⟨s, r_s, f_s, ..., f_1⟩`, together with
   decoding, interpreters, and explicit length/prefix-complexity bounds
 - Section 4 autoencoder/search semantics: encoded autoencoder payloads and outputs, the fixed
-  interpreter `W`, concrete ALICE / Greedy-ALICE branch semantics, concrete phase programs and
-  budgets, paper-form Lemma 4.1 for the live scheduler, and a Section 4 Theorem 4.1 wrapper
-  showing that incremental `b`-compression schemes induce ALICE branches whose descriptions
-  reconstruct `x` and whose search cost is bounded by the paper-style weighted sum using actual
-  bounded-evaluation runtimes of the displayed `f_i` and `f_i'`
+  interpreter `W`, concrete ALICE / Greedy-ALICE branch semantics, Algorithm 2-style call
+  states with per-program statuses and the global description-log shape `D`, concrete phase
+  programs and budgets, paper-form Lemma 4.1 for the live scheduler, and a Section 4 Theorem 4.1
+  wrapper showing that incremental `b`-compression schemes induce both ALICE branches and focused
+  recursive operational traces whose descriptions reconstruct `x` and whose search cost is bounded
+  by the paper-style weighted sum using actual bounded-evaluation runtimes of the displayed `f_i`
+  and `f_i'`
 - Section 5 Martin-Lof randomness: paper-form Theorem 5.1 from features to randomness tests and
   paper-form Theorem 5.2 from uniform unbounded randomness tests back to a single feature
 
@@ -95,10 +97,11 @@ How to interpret the results:
 - Local commands such as `set_option maxHeartbeats ... in` only raise Lean's elaboration budget for
   expensive proofs. They do not add assumptions or weaken soundness.
 
-One important scope note: Section 4 currently formalizes a concrete scheduler and search-tree
-semantics around the paper's machine `W`, plus a theorem-level runtime wrapper instantiated by
-actual bounded-evaluation runtimes. It does not yet formalize the printed recursive Algorithm 2
-state verbatim with an explicit per-program status dictionary and global list `D`.
+One important scope note: Section 4 now includes explicit Algorithm 2-style call states, status
+dictionaries, and the global description-log shape `D` along the successful branch. What is still
+not present is a full small-step execution model of the entire recursive scheduler over all calls
+at once; the current theorem isolates the successful branch operationally and combines it with the
+proved scheduler/runtime bounds.
 
 ## Project Notes
 
