@@ -24,10 +24,11 @@ Current compiled coverage includes:
   interpreter `W`, concrete ALICE / Greedy-ALICE branch semantics, Algorithm 2-style call
   states with per-program statuses and the global description-log shape `D`, concrete phase
   programs and budgets, paper-form Lemma 4.1 for the live scheduler, and a Section 4 Theorem 4.1
-  wrapper showing that incremental `b`-compression schemes induce both ALICE branches and focused
-  recursive operational traces whose descriptions reconstruct `x` and whose search cost is bounded
-  by the paper-style weighted sum using actual bounded-evaluation runtimes of the displayed `f_i`
-  and `f_i'`
+  wrapper showing that incremental `b`-compression schemes induce both ALICE branches and
+  reachable Algorithm 2-style scheduler states whose active recursion stack, status dictionaries,
+  and description log reconstruct the successful branch, with search cost bounded by the
+  paper-style weighted sum using actual bounded-evaluation runtimes of the displayed `f_i` and
+  `f_i'`
 - Section 5 Martin-Lof randomness: paper-form Theorem 5.1 from features to randomness tests and
   paper-form Theorem 5.2 from uniform unbounded randomness tests back to a single feature
 
@@ -55,6 +56,10 @@ actual machine-level objects and constants hidden by the paper's asymptotic nota
 - `Compression.theorem41_current` retains explicit weighted-sum and closed-form search-time bounds
   stronger than the paper's asymptotic Theorem 4.1. This is useful because later proofs can reuse
   concrete arithmetic estimates instead of unpacking `O(i)` terms again.
+- `Compression.theorem41` now returns not just the paper's existential description guarantee, but
+  also a reachable global scheduler state carrying the active recursive call stack, the per-call
+  status dictionaries, and the branch contribution to the global list `D`. This is useful because
+  it exposes the operational witness behind the theorem rather than only its final output.
 - `Compression.theorem52_decoder` is a constructive strengthening of Theorem 5.2: it extracts a
   feature `f` and threshold `m` with `|f| = m - 1` plus an explicit decoder for the `m`-th
   randomness level set. This is useful because the randomness-to-feature map is executable and not
@@ -98,10 +103,11 @@ How to interpret the results:
   expensive proofs. They do not add assumptions or weaken soundness.
 
 One important scope note: Section 4 now includes explicit Algorithm 2-style call states, status
-dictionaries, and the global description-log shape `D` along the successful branch. What is still
-not present is a full small-step execution model of the entire recursive scheduler over all calls
-at once; the current theorem isolates the successful branch operationally and combines it with the
-proved scheduler/runtime bounds.
+dictionaries, the global description-log shape `D`, and a small-step execution model for the
+successful recursive call stack. What is still not present is the exact fair phase-by-phase
+interleaving of every candidate autoencoder evaluation across all active calls; the current theorem
+packages the successful scheduler execution prefix together with the proved scheduler/runtime
+bounds.
 
 ## Project Notes
 

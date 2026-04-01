@@ -45,16 +45,18 @@ Current Lean status:
 - `IcTheory/Compression/Section4.lean` formalizes the fixed machine `W`, the accepted
   autoencoder-step predicate, concrete phase programs/budgets, and search-tree semantics
   (`AliceNode`, `IsAliceBranch`) for ALICE / Greedy-ALICE, together with Algorithm 2-style
-  call-state/status objects (`AliceCallState`, `AliceProgramStatus`) and a focused recursive-path
-  container (`AliceOperationalPath`).
+  call-state/status objects (`AliceCallState`, `AliceProgramStatus`), a focused recursive-path
+  container (`AliceOperationalPath`), and a global scheduler state/step model
+  (`AliceSchedulerState`, `AliceSchedulerStep`, `AliceSchedulerExec`).
 - Lemma 4.1 is formalized for the concrete live scheduler in
   `IcTheory/Compression/Theorem41.lean`.
 - The main Section 4 theorem in `IcTheory/Compression/Theorem41.lean` now instantiates the paper's
   `t_i` and `t_i'` with actual bounded-evaluation runtimes extracted from the corresponding `runs`
-  proofs, and it returns a focused Algorithm 2-style operational path carrying explicit status
-  dictionaries and the branch's contribution to the global description list `D`.
-- What is still not formalized verbatim is a full small-step execution semantics for the whole
-  recursive scheduler over all calls simultaneously.
+  proofs, and it returns both a focused Algorithm 2-style operational path and a reachable global
+  scheduler state carrying explicit status dictionaries and the branch's contribution to the global
+  description list `D`.
+- What is still not formalized verbatim is the exact fair phase-by-phase interleaving of every
+  candidate autoencoder evaluation across all active calls.
 
 ## Section 5
 

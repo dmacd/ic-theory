@@ -385,6 +385,17 @@ inductive AliceOperationalPath where
 def AliceCallState.root (x : Program) : AliceCallState :=
   ⟨x, [], defaultAliceStatus⟩
 
+/-- Global execution state for the printed recursive scheduler: the active recursion stack, stored
+with the current call first and the root call last, together with the global description list
+`D`. -/
+structure AliceSchedulerState where
+  activeCallsRev : List AliceCallState
+  descriptions : List Program
+
+/-- Initial global scheduler state of Algorithm 2. -/
+def AliceSchedulerState.root (x : Program) : AliceSchedulerState :=
+  ⟨[AliceCallState.root x], []⟩
+
 /-- Root call state of an operational Algorithm 2 branch. -/
 def AliceOperationalPath.rootState : AliceOperationalPath → AliceCallState
   | .stop state => state
@@ -401,11 +412,47 @@ the forward order `f₁, ..., fₛ`, so we reverse here. -/
 def aliceDescription (r : Program) (featuresRev : List Program) : Program :=
   schemeDescription r featuresRev.reverse
 
+/-- Active recursion stack carried by a focused operational path, with the current call first and
+the root call last. -/
+def AliceOperationalPath.activeCallsRev : AliceOperationalPath → List AliceCallState
+  | .stop state => [state]
+  | .step state child => child.activeCallsRev ++ [state]
+
+/-- One successful recursive descent of Algorithm 2 inside the live scheduler semantics. The
+status dictionary of the parent call records the discovered child, the child call becomes current,
+and the corresponding description is appended to the global list `D`. -/
+inductive AliceSchedulerStep : AliceSchedulerState → AliceSchedulerState → Prop
+  | descend {current : AliceCallState} {parents : List AliceCallState}
+      {descriptions : List Program} {g f r : Program}
+      (hstep : AutoencoderStep current.input g f r) :
+      AliceSchedulerStep
+        ⟨current :: parents, descriptions⟩
+        ⟨⟨r, f :: current.featuresRev, defaultAliceStatus⟩ ::
+            ⟨current.input, current.featuresRev,
+              setAliceStatus current.status (autoencoderPayload g f)
+                (.child r (f :: current.featuresRev))⟩ ::
+            parents,
+          descriptions ++ [aliceDescription r (f :: current.featuresRev)]⟩
+
+/-- Finite execution prefix of the global Algorithm 2 scheduler. -/
+inductive AliceSchedulerExec : AliceSchedulerState → AliceSchedulerState → Prop
+  | refl (state : AliceSchedulerState) : AliceSchedulerExec state state
+  | tail {state next final : AliceSchedulerState}
+      (hstep : AliceSchedulerStep state next)
+      (hexec : AliceSchedulerExec next final) :
+      AliceSchedulerExec state final
+
 @[simp] theorem AliceCallState_root_input (x : Program) :
     (AliceCallState.root x).input = x := rfl
 
 @[simp] theorem AliceCallState_root_featuresRev (x : Program) :
     (AliceCallState.root x).featuresRev = [] := rfl
+
+@[simp] theorem AliceSchedulerState_root_activeCallsRev (x : Program) :
+    (AliceSchedulerState.root x).activeCallsRev = [AliceCallState.root x] := rfl
+
+@[simp] theorem AliceSchedulerState_root_descriptions (x : Program) :
+    (AliceSchedulerState.root x).descriptions = [] := rfl
 
 @[simp] theorem AliceOperationalPath_rootState_stop (state : AliceCallState) :
     (AliceOperationalPath.stop state).rootState = state := rfl
@@ -420,6 +467,13 @@ def aliceDescription (r : Program) (featuresRev : List Program) : Program :=
 @[simp] theorem AliceOperationalPath_terminalState_step
     (state : AliceCallState) (child : AliceOperationalPath) :
     (AliceOperationalPath.step state child).terminalState = child.terminalState := rfl
+
+@[simp] theorem AliceOperationalPath_activeCallsRev_stop (state : AliceCallState) :
+    (AliceOperationalPath.stop state).activeCallsRev = [state] := rfl
+
+@[simp] theorem AliceOperationalPath_activeCallsRev_step
+    (state : AliceCallState) (child : AliceOperationalPath) :
+    (AliceOperationalPath.step state child).activeCallsRev = child.activeCallsRev ++ [state] := rfl
 
 @[simp] theorem aliceDescription_nil (r : Program) :
     aliceDescription r [] = schemeDescription r [] := by

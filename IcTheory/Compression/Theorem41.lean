@@ -654,6 +654,7 @@ inductive IsAliceOperationalPath :
   | cons {current : Program} {prefixRev : List Program}
       {f g r rs : Program} {fs gs : List Program}
       {child : AliceOperationalPath} {descriptions : List Program}
+      (hstep : AutoencoderStep current g f r)
       (hchild : IsAliceOperationalPath r (f :: prefixRev) fs gs rs child descriptions) :
       IsAliceOperationalPath current prefixRev (f :: fs) (g :: gs) rs
         (.step
@@ -679,7 +680,7 @@ theorem operationalPath_terminalState
   induction hpath with
   | stop current prefixRev =>
       simp [AliceOperationalPath.terminalState]
-  | @cons current prefixRev f g r rs fs gs child descriptions hchild ih =>
+  | @cons current prefixRev f g r rs fs gs child descriptions hstep hchild ih =>
       simpa [AliceOperationalPath.terminalState, List.reverse_cons, List.append_assoc] using ih
 
 theorem operationalPath_descriptions_eq_nil
@@ -702,7 +703,7 @@ theorem operationalPath_finalDescription_mem_of_ne_nil
   | stop current prefixRev =>
       exfalso
       exact hfs rfl
-  | @cons current prefixRev f g r rs fs gs child descriptions hchild ih =>
+  | @cons current prefixRev f g r rs fs gs child descriptions hstep hchild ih =>
       by_cases htail : fs = []
       · subst htail
         cases hchild
@@ -712,6 +713,55 @@ theorem operationalPath_finalDescription_mem_of_ne_nil
           exact ih htail
         simpa [List.reverse_cons, List.append_assoc] using
           List.mem_cons_of_mem (aliceDescription r (f :: prefixRev)) hmem
+
+theorem schedulerExec_extension_of_operationalPath
+    {current : Program} {prefixRev : List Program} {fs gs : List Program} {rs : Program}
+    {path : AliceOperationalPath} {descriptions : List Program}
+    (parents : List AliceCallState)
+    (descriptionsPrefix : List Program)
+    (hpath : IsAliceOperationalPath current prefixRev fs gs rs path descriptions) :
+    AliceSchedulerExec
+      ⟨⟨current, prefixRev, defaultAliceStatus⟩ :: parents, descriptionsPrefix⟩
+      ⟨path.activeCallsRev ++ parents, descriptionsPrefix ++ descriptions⟩ := by
+  induction hpath generalizing parents descriptionsPrefix with
+  | stop current prefixRev =>
+      simpa [AliceOperationalPath.activeCallsRev] using
+        (AliceSchedulerExec.refl
+          ⟨⟨current, prefixRev, defaultAliceStatus⟩ :: parents, descriptionsPrefix⟩)
+  | @cons current prefixRev f g r rs fs gs child descriptions hstep hchild ih =>
+      let updatedCurrent : AliceCallState :=
+        ⟨current, prefixRev,
+          setAliceStatus defaultAliceStatus (autoencoderPayload g f)
+            (.child r (f :: prefixRev))⟩
+      let childState : AliceCallState :=
+        ⟨r, f :: prefixRev, defaultAliceStatus⟩
+      have hstep' : AutoencoderStep (⟨current, prefixRev, defaultAliceStatus⟩ : AliceCallState).input g f r := by
+        simpa using hstep
+      have htail :
+          AliceSchedulerExec
+            ⟨childState :: updatedCurrent :: parents,
+              descriptionsPrefix ++ [aliceDescription r (f :: prefixRev)]⟩
+            ⟨child.activeCallsRev ++ updatedCurrent :: parents,
+              (descriptionsPrefix ++ [aliceDescription r (f :: prefixRev)]) ++ descriptions⟩ := by
+        simpa [childState, updatedCurrent] using
+          ih (updatedCurrent :: parents) (descriptionsPrefix ++ [aliceDescription r (f :: prefixRev)])
+      refine AliceSchedulerExec.tail
+        (next := ⟨childState :: updatedCurrent :: parents,
+          descriptionsPrefix ++ [aliceDescription r (f :: prefixRev)]⟩) ?_ ?_
+      · simpa [childState, updatedCurrent] using
+          (AliceSchedulerStep.descend (current := ⟨current, prefixRev, defaultAliceStatus⟩)
+            (parents := parents) (descriptions := descriptionsPrefix)
+            (g := g) (f := f) (r := r) hstep')
+      · simpa [AliceOperationalPath.activeCallsRev, updatedCurrent, List.append_assoc] using htail
+
+theorem schedulerExec_of_operationalPath
+    {current : Program} {prefixRev : List Program} {fs gs : List Program} {rs : Program}
+    {path : AliceOperationalPath} {descriptions : List Program}
+    (hpath : IsAliceOperationalPath current prefixRev fs gs rs path descriptions) :
+    AliceSchedulerExec
+      ⟨[⟨current, prefixRev, defaultAliceStatus⟩], []⟩
+      ⟨path.activeCallsRev, descriptions⟩ := by
+  simpa using schedulerExec_extension_of_operationalPath ([] : List AliceCallState) [] hpath
 
 private theorem exists_operationalPath_extension_of_incrementalBCompressionScheme
     {b : Nat} {current rs : Program} {fs gs : List Program}
@@ -733,7 +783,7 @@ private theorem exists_operationalPath_extension_of_incrementalBCompressionSchem
               (.child r (f :: prefixRev))⟩
           child,
         aliceDescription r (f :: prefixRev) :: descriptions,
-        .cons hchild
+        .cons (bCompressionSchemeStep_isAutoencoderStep hstep) hchild
       ⟩
 
 theorem exists_operationalPath_of_incrementalBCompressionScheme
@@ -1489,6 +1539,8 @@ theorem theorem41
     ∃ node path descriptions,
       IsAliceBranch x node ∧ node.features = fs ∧
       IsAliceOperationalPath x [] fs gs rs path descriptions ∧
+      AliceSchedulerExec (AliceSchedulerState.root x)
+        ⟨path.activeCallsRev, descriptions⟩ ∧
       path.rootState.input = x ∧
       path.rootState.featuresRev = [] ∧
       path.terminalState.input = rs ∧
@@ -1516,9 +1568,12 @@ theorem theorem41
       hmapLen
   obtain ⟨path, descriptions, hpath⟩ :=
     exists_operationalPath_of_incrementalBCompressionScheme hchain
+  have hsched : AliceSchedulerExec (AliceSchedulerState.root x)
+      ⟨path.activeCallsRev, descriptions⟩ := by
+    simpa [AliceSchedulerState.root, AliceCallState.root] using schedulerExec_of_operationalPath hpath
   have hroot := operationalPath_rootState hpath
   have hterminal := operationalPath_terminalState hpath
-  refine ⟨node, path, descriptions, hnode, hfeatures, hpath, hroot.1, hroot.2, hterminal.1, ?_, ?_, ?_, hdesc, hruns, ?_⟩
+  refine ⟨node, path, descriptions, hnode, hfeatures, hpath, hsched, hroot.1, hroot.2, hterminal.1, ?_, ?_, ?_, hdesc, hruns, ?_⟩
   · simpa using hterminal.2
   · intro hfs
     exact operationalPath_descriptions_eq_nil hpath hfs
