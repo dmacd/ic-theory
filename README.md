@@ -2,6 +2,17 @@
 
 Lean 4 + Mathlib formalization workspace for *A theory of incremental compression*.
 
+## Disclaimer
+
+This repository was authored mainly by Codex 5.4. The development methodology, such as it has
+been, was largely an iterative human/LLM loop: propose definitions and theorem statements, try to
+make them compile, inspect failures, patch the model, and then do some spot-checking and
+cross-comparison against the paper.
+
+I (Daniel) do not understand enough Lean to stand behind the claim that the theorems encoded here
+faithfully match the intent of the paper in every detail. GPT Pro was mostly convinced, but that
+is not the same thing as an expert human Lean audit. Caveat emptor.
+
 ## Status
 
 The development now covers the paper's foundations, the complexity layer, the Section 2/3 theorem
